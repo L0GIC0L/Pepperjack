@@ -359,7 +359,7 @@ private fun DrawScope.drawProbes(schematic: Schematic, transform: GridTransform,
         when (probe.type) {
             ProbeType.VOLTAGE -> {
                 val c = transform.toScreen(probe.x.toFloat(), probe.y.toFloat())
-                val tip = c + Offset(10.dp.toPx(), -14.dp.toPx())
+                val tip = c + Offset(-12.dp.toPx(), -14.dp.toPx()) // up-left, clear of net label text
                 drawLine(color, c, tip, 2.dp.toPx(), StrokeCap.Round)
                 drawCircle(color, radius = 5.dp.toPx(), center = tip)
                 drawCircle(color, radius = 2.5.dp.toPx(), center = c)

@@ -21,9 +21,10 @@ WORK_DIR="${WORK_DIR:-$ROOT/build/ngspice}"
 OUT_DIR="${OUT_DIR:-$ROOT/app/src/main/jniLibs}"
 JOBS="${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}"
 
-# The XSPICE code models ngspice's spinit normally loads. They are renamed to
-# lib*.so so Android packages and extracts them next to libngspice.so.
-CODE_MODELS="spice2poly analog digital xtradev xtraevt table tlines"
+# The XSPICE code models ngspice's spinit normally loads, renamed to lib*.so so
+# Android packages and extracts them next to libngspice.so. "table" is left out
+# because it is GPLv2 while the rest of what ships is BSD/LGPL/MPL/public domain.
+CODE_MODELS="spice2poly analog digital xtradev xtraevt tlines"
 
 : "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to an Android NDK r28 or newer}"
 case "$(uname -s)" in
@@ -95,6 +96,7 @@ for ABI in $ABIS; do
             --enable-xspice \
             --enable-cider \
             --enable-osdi \
+            --disable-openmp \
             --disable-debug \
             --without-x \
             --with-fftw3=no \
@@ -124,11 +126,28 @@ for ABI in $ABIS; do
     done
     "$TOOLCHAIN/bin/llvm-strip" --strip-unneeded "$DEST"/libngspice*.so
 
+    # Everything libngspice.so needs must exist on a stock device or ship in the APK
+    # (libc++_shared.so comes with the JNI bridge).
     echo ">> $ABI dependencies:"
-    "$TOOLCHAIN/bin/llvm-readelf" -d "$DEST/libngspice.so" | grep -E 'NEEDED|SONAME' || true
+    NEEDED=$("$TOOLCHAIN/bin/llvm-readelf" -d "$DEST/libngspice.so" | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p')
+    echo "$NEEDED" | sed 's/^/   /'
+    for LIB in $NEEDED; do
+        case "$LIB" in
+            libc.so|libm.so|libdl.so|liblog.so|libc++_shared.so) ;;
+            *) echo "libngspice.so needs $LIB, which Android does not provide" >&2; exit 1 ;;
+        esac
+    done
+    # dlmain.c references every model's <c_function>_info table; if cmpp listed no
+    # models when building the objects, those references stay unresolved.
     for CM in $CODE_MODELS; do
-        COUNT=$("$TOOLCHAIN/bin/llvm-nm" -D --defined-only "$DEST/libngspice_cm_$CM.so" | wc -l)
-        echo "   libngspice_cm_$CM.so exports $COUNT symbols"
+        LIB="$DEST/libngspice_cm_$CM.so"
+        MISSING=$("$TOOLCHAIN/bin/llvm-nm" -D --undefined-only "$LIB" | grep -E '_info$' || true)
+        if [ -n "$MISSING" ]; then
+            echo "Code model $CM is missing its models:" >&2
+            echo "$MISSING" >&2
+            exit 1
+        fi
+        echo "   libngspice_cm_$CM.so  $(wc -c < "$LIB") bytes"
     done
 done
 

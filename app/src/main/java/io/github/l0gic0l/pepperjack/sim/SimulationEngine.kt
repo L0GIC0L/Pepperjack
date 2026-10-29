@@ -208,7 +208,7 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
     }
 
     companion object {
-        /** XSPICE code models that ngspice's stock spinit loads, in the same order. */
-        val CODE_MODELS = listOf("spice2poly", "analog", "digital", "xtradev", "xtraevt", "table", "tlines")
+        /** XSPICE code models bundled by scripts/build-ngspice-android.sh, in spinit order. */
+        val CODE_MODELS = listOf("spice2poly", "analog", "digital", "xtradev", "xtraevt", "tlines")
     }
 }

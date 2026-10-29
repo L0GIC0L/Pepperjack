@@ -141,8 +141,9 @@ fun SettingsScreen(container: AppContainer, settings: Settings) {
                 headlineContent = { Text("Pepperjack ${BuildConfig.VERSION_NAME}") },
                 supportingContent = {
                     Text(
-                        "Open source on GitHub. Simulation by ngspice (BSD-3-Clause and others), " +
-                            "© the ngspice developers.",
+                        "Open source (MIT) on GitHub. Simulation by ngspice 47, © the ngspice team: " +
+                            "Modified BSD, with KLU and numparam under LGPLv2, OSDI under MPL 2.0 and " +
+                            "XSPICE in the public domain. Source: sourceforge.net/projects/ngspice.",
                     )
                 },
                 modifier = Modifier.clickableRow { uriHandler.openUri("https://github.com/l0gic0l/pepperjack") },

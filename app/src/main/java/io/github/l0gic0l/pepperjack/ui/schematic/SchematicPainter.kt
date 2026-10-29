@@ -34,9 +34,11 @@ data class GridTransform(val scale: Float, val offset: Offset) {
     companion object {
         /** Fits [schematic] into [size] with a margin, never zooming past [maxScale] px per grid unit. */
         fun fit(schematic: Schematic, size: Size, maxScale: Float, minScale: Float): GridTransform {
-            val b = schematic.bounds() ?: floatArrayOf(-8f, -6f, 8f, 6f)
-            val width = (b[2] - b[0]).coerceAtLeast(4f) + 4f
-            val height = (b[3] - b[1]).coerceAtLeast(4f) + 4f
+            val raw = schematic.bounds() ?: floatArrayOf(-8f, -6f, 8f, 6f)
+            // Reference/value text sits to the right of parts and above labels, so pad those sides more.
+            val b = floatArrayOf(raw[0] - 2f, raw[1] - 3f, raw[2] + 6f, raw[3] + 2f)
+            val width = (b[2] - b[0]).coerceAtLeast(8f)
+            val height = (b[3] - b[1]).coerceAtLeast(8f)
             val scale = minOf(size.width / width, size.height / height).coerceIn(minScale, maxScale)
             val cx = (b[0] + b[2]) / 2f
             val cy = (b[1] + b[3]) / 2f

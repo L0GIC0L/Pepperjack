@@ -3,6 +3,7 @@ package io.github.l0gic0l.pepperjack.ui.editor
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -108,7 +109,7 @@ fun EditorToolbar(
             }
             ToolButton(Icons.AutoMirrored.Outlined.ShowChart, "Probe voltages and currents", tool == Tool.PROBE) { onTool(Tool.PROBE) }
             ToolButton(Icons.Outlined.ContentCut, "Delete", tool == Tool.DELETE) { onTool(Tool.DELETE) }
-            VerticalDivider(Modifier.padding(horizontal = 4.dp).width(1.dp))
+            VerticalDivider(Modifier.padding(horizontal = 4.dp).height(24.dp))
             ActionButton(Icons.AutoMirrored.Outlined.Undo, "Undo", canUndo, onUndo)
             ActionButton(Icons.AutoMirrored.Outlined.Redo, "Redo", canRedo, onRedo)
         }
