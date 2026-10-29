@@ -7,9 +7,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.withStarted
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -24,6 +27,7 @@ import io.github.l0gic0l.pepperjack.ui.home.HomeScreen
 import io.github.l0gic0l.pepperjack.ui.symbols.SymbolEditorScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
@@ -42,12 +46,23 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
     val navController = rememberNavController()
     val context = LocalContext.current
     val incoming by pendingImport.collectAsStateWithLifecycle()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val scope = rememberCoroutineScope()
+
+    // Screens open from async work (saving a new circuit, an import). Navigating while the
+    // activity is stopped leaves the new destination uncomposed, and destroying the activity
+    // then crashes inside Navigation, so wait until it is started (or drop it if destroyed).
+    fun open(route: Any) {
+        scope.launch {
+            runCatching { lifecycle.withStarted { navController.navigate(route) } }
+        }
+    }
 
     LaunchedEffect(incoming) {
         val uri = incoming ?: return@LaunchedEffect
         pendingImport.value = null
         importNetlist(context, container, uri)
-            .onSuccess { navController.navigate(EditorRoute(it)) }
+            .onSuccess { open(EditorRoute(it)) }
             .onFailure { Toast.makeText(context, it.message ?: "Import failed", Toast.LENGTH_LONG).show() }
     }
 
@@ -62,8 +77,8 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
             HomeScreen(
                 container = container,
                 settings = settings,
-                onOpenCircuit = { navController.navigate(EditorRoute(it)) },
-                onEditSymbol = { id, file, subckt -> navController.navigate(SymbolEditorRoute(id, file, subckt)) },
+                onOpenCircuit = { open(EditorRoute(it)) },
+                onEditSymbol = { id, file, subckt -> open(SymbolEditorRoute(id, file, subckt)) },
             )
         }
         composable<SymbolEditorRoute> { entry ->

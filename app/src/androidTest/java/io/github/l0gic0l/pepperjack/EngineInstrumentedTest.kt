@@ -22,7 +22,7 @@ class EngineInstrumentedTest {
         (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as PepperjackApplication).container
 
     @Test
-    fun engineStartsAndSimulatesEveryExample() = runBlocking {
+    fun engineStartsAndSimulatesEveryExample(): Unit = runBlocking {
         val status = container.engine.status()
         Log.i(TAG, "Engine status: $status")
         assertTrue("$status", status is EngineStatus.Ready)
@@ -50,7 +50,7 @@ class EngineInstrumentedTest {
 
     /** Live netlists of every schematic example simulate and map onto their wires. */
     @Test
-    fun liveViewForEverySchematicExample() = runBlocking {
+    fun liveViewForEverySchematicExample(): Unit = runBlocking {
         assertTrue(container.engine.status() is EngineStatus.Ready)
         for (example in Examples.all) {
             val circuit = example.build()
@@ -66,7 +66,7 @@ class EngineInstrumentedTest {
 
     /** Every built-in model on the device's ngspice, including the XSPICE logic and 555 models. */
     @Test
-    fun everyBuiltInModelSimulates() = runBlocking {
+    fun everyBuiltInModelSimulates(): Unit = runBlocking {
         assertTrue(container.engine.status() is EngineStatus.Ready)
         for (circuit in ModelZoo.benches()) {
             for (live in listOf(false, true)) {
