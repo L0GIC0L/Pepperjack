@@ -76,7 +76,6 @@ using StringFn = char* (*)();
 using StringArrayFn = char** (*)();
 using StringArrayArgFn = char** (*)(char*);
 using BoolFn = bool (*)();
-using IntFn = int (*)();
 using CmInputPathFn = char* (*)(const char*);
 
 constexpr short kVfComplex = 1 << 1;
@@ -92,8 +91,6 @@ struct Engine {
     StringArrayFn allPlots = nullptr;
     StringArrayArgFn allVecs = nullptr;
     BoolFn running = nullptr;
-    IntFn noSpinit = nullptr;
-    IntFn noSpiceinit = nullptr;
     CmInputPathFn cmInputPath = nullptr;
     bool initialized = false;
 
@@ -267,8 +264,6 @@ JNIEXPORT jstring JNI_FN(load)(JNIEnv* env, jobject, jstring libraryPath) {
               bind(g.allPlots, "ngSpice_AllPlots", true, error) &&
               bind(g.allVecs, "ngSpice_AllVecs", true, error) &&
               bind(g.running, "ngSpice_running", true, error) &&
-              bind(g.noSpinit, "ngSpice_nospinit", false, error) &&
-              bind(g.noSpiceinit, "ngSpice_nospiceinit", false, error) &&
               bind(g.cmInputPath, "ngCM_Input_Path", false, error);
     if (!ok) {
         dlclose(g.handle);
@@ -282,10 +277,10 @@ JNIEXPORT jstring JNI_FN(load)(JNIEnv* env, jobject, jstring libraryPath) {
 JNIEXPORT jboolean JNI_FN(initialize)(JNIEnv*, jobject) {
     if (g.handle == nullptr) return JNI_FALSE;
     if (g.initialized) return JNI_TRUE;
-    // spinit and .spiceinit live at desktop install paths; the app sends the
-    // equivalent commands itself (code models, options) after init.
-    if (g.noSpinit != nullptr) g.noSpinit();
-    if (g.noSpiceinit != nullptr) g.noSpiceinit();
+    // Deliberately no ngSpice_nospinit()/ngSpice_nospiceinit(): in ngspice 47 they
+    // crash before ngSpice_Init (cp_vset reaches if_option while ft_sim is still
+    // null). spinit is looked up under the desktop install prefix, which does not
+    // exist on Android, and the app loads the code models itself after init.
     g.exited = false;
     LOGI("Calling ngSpice_Init");
     int rc = g.init(onSendChar, onSendStat, onControlledExit, onSendData, onSendInitData,
