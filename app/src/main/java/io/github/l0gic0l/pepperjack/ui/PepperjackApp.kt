@@ -21,6 +21,7 @@ import io.github.l0gic0l.pepperjack.ui.common.CrashReportDialog
 import io.github.l0gic0l.pepperjack.ui.common.importNetlist
 import io.github.l0gic0l.pepperjack.ui.editor.EditorScreen
 import io.github.l0gic0l.pepperjack.ui.home.HomeScreen
+import io.github.l0gic0l.pepperjack.ui.symbols.SymbolEditorScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -31,6 +32,10 @@ data object HomeRoute
 
 @Serializable
 data class EditorRoute(val circuitId: String)
+
+/** Edits [symbolId], or makes a new symbol for [subckt] from library [file]. */
+@Serializable
+data class SymbolEditorRoute(val symbolId: String? = null, val file: String? = null, val subckt: String? = null)
 
 @Composable
 fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: MutableStateFlow<Uri?>) {
@@ -58,6 +63,17 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
                 container = container,
                 settings = settings,
                 onOpenCircuit = { navController.navigate(EditorRoute(it)) },
+                onEditSymbol = { id, file, subckt -> navController.navigate(SymbolEditorRoute(id, file, subckt)) },
+            )
+        }
+        composable<SymbolEditorRoute> { entry ->
+            val route = entry.toRoute<SymbolEditorRoute>()
+            SymbolEditorScreen(
+                container = container,
+                symbolId = route.symbolId,
+                file = route.file,
+                subckt = route.subckt,
+                onBack = { navController.popBackStack() },
             )
         }
         composable<EditorRoute> { entry ->

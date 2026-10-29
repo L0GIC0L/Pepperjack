@@ -4,23 +4,32 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.l0gic0l.pepperjack.AppContainer
 import io.github.l0gic0l.pepperjack.model.AnalysisConfig
+import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
+import io.github.l0gic0l.pepperjack.model.CustomSymbol
+import io.github.l0gic0l.pepperjack.model.CustomSymbols
 import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
+import io.github.l0gic0l.pepperjack.model.PotValue
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
+import io.github.l0gic0l.pepperjack.model.SwitchValue
 import io.github.l0gic0l.pepperjack.model.Wire
+import io.github.l0gic0l.pepperjack.model.def
 import io.github.l0gic0l.pepperjack.model.pinPositions
+import io.github.l0gic0l.pepperjack.sim.LiveView
 import io.github.l0gic0l.pepperjack.sim.PlotKind
 import io.github.l0gic0l.pepperjack.sim.Quantity
 import io.github.l0gic0l.pepperjack.sim.SimulationResult
 import io.github.l0gic0l.pepperjack.spice.Connectivity
 import io.github.l0gic0l.pepperjack.spice.Netlister
+import io.github.l0gic0l.pepperjack.ui.live.LiveColorMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class Tool { SELECT, WIRE, PROBE, DELETE }
 
@@ -36,6 +46,8 @@ data class EditorState(
     val circuit: Circuit? = null,
     val tool: Tool = Tool.SELECT,
     val placing: PartKind? = null,
+    /** The symbol being placed when [placing] is [PartKind.CUSTOM]. */
+    val placingSymbol: CustomSymbol? = null,
     val placingRotation: Int = 0,
     val placingMirrored: Boolean = false,
     val selectedPartId: Long? = null,
@@ -45,11 +57,21 @@ data class EditorState(
     /** Part whose properties sheet is open. */
     val editingPartId: Long? = null,
     val running: Boolean = false,
+    /** Counts runs started with the Run button, so the UI can switch to the results for those only. */
+    val runCount: Int = 0,
     val result: SimulationResult? = null,
     /** Visible traces per analysis, by ngspice vector name. */
     val traces: Map<PlotKind, Set<String>> = emptyMap(),
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
+    /** Live simulation: re-simulate on every edit and draw voltages and currents on the schematic. */
+    val live: Boolean = false,
+    val liveRunning: Boolean = false,
+    val liveView: LiveView? = null,
+    val liveError: String? = null,
+    val liveColorMode: LiveColorMode = LiveColorMode.VOLTAGE,
+    /** Wire whose voltage and current the live view labels. */
+    val inspectWireId: Long? = null,
 ) {
     val selectedPart: Part? get() = circuit?.schematic?.parts?.firstOrNull { it.id == selectedPartId }
 }
@@ -63,6 +85,9 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     private val redoStack = ArrayDeque<Schematic>()
     private var saveJob: Job? = null
     private var runJob: Job? = null
+    private var liveJob: Job? = null
+    private var liveGeneration = 0
+    private var liveDialect = SpiceDialect.Default
 
     init {
         viewModelScope.launch {
@@ -82,6 +107,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
             redoStack.clear()
         }
         _state.update { it.copy(circuit = next, canUndo = undoStack.isNotEmpty(), canRedo = redoStack.isNotEmpty()) }
+        if (_state.value.live) scheduleLive()
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(500)
@@ -128,11 +154,14 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         it.copy(tool = tool, placing = null, wireStart = null, selectedPartId = null, selectedWireId = null)
     }
 
-    fun startPlacing(kind: PartKind) = _state.update {
-        it.copy(placing = kind, placingRotation = 0, placingMirrored = false, tool = Tool.SELECT, selectedPartId = null, selectedWireId = null)
+    fun startPlacing(choice: PartChoice) = _state.update {
+        it.copy(
+            placing = choice.kind, placingSymbol = choice.symbol, placingRotation = 0, placingMirrored = false,
+            tool = Tool.SELECT, selectedPartId = null, selectedWireId = null,
+        )
     }
 
-    fun stopPlacing() = _state.update { it.copy(placing = null) }
+    fun stopPlacing() = _state.update { it.copy(placing = null, placingSymbol = null) }
     fun rotatePlacing() = _state.update { it.copy(placingRotation = (it.placingRotation + 1) % 4) }
     fun mirrorPlacing() = _state.update { it.copy(placingMirrored = !it.placingMirrored) }
 
@@ -142,9 +171,13 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         val state = _state.value
         val schematic = state.circuit?.schematic ?: return
         when {
-            state.placing != null -> place(state.placing, point)
+            state.placing != null -> place(state.placing, state.placingSymbol, point)
+            // While live, tapping a switch flips it, like the real thing.
+            state.live && state.tool == Tool.SELECT && hitPart != null &&
+                (hitPart.kind == PartKind.SPST || hitPart.kind == PartKind.SPDT) -> toggleSwitch(hitPart)
             state.tool == Tool.SELECT -> _state.update {
-                it.copy(selectedPartId = hitPart?.id, selectedWireId = if (hitPart == null) hitWire?.id else null)
+                val wire = if (hitPart == null) hitWire?.id else null
+                it.copy(selectedPartId = hitPart?.id, selectedWireId = wire, inspectWireId = if (it.live) wire else null)
             }
             state.tool == Tool.WIRE -> {
                 val start = state.wireStart
@@ -168,28 +201,44 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
 
     fun cancelWire() = _state.update { it.copy(wireStart = null) }
 
-    private fun place(kind: PartKind, point: GridPoint) {
+    fun select(partId: Long) = _state.update { it.copy(selectedPartId = partId, selectedWireId = null, inspectWireId = null) }
+
+    fun toggleSwitch(part: Part) {
+        val value = if (part.kind == PartKind.SPST) SwitchValue.toggleSpst(part.value) else SwitchValue.toggleSpdt(part.value)
+        edit { s -> s.copy(parts = s.parts.map { if (it.id == part.id) it.copy(value = value) else it }) }
+    }
+
+    /** Turns a potentiometer's knob; not recorded for undo, like adjusting a real one. */
+    fun setPotPosition(id: Long, position: Double) = mutate(false) { c ->
+        c.copy(
+            schematic = c.schematic.copy(
+                parts = c.schematic.parts.map { if (it.id == id) it.copy(value = PotValue.parse(it.value).copy(position = position).format()) else it },
+            ),
+        )
+    }
+
+    private fun place(kind: PartKind, symbol: CustomSymbol?, point: GridPoint) {
         val state = _state.value
         val schematic = state.circuit?.schematic ?: return
-        val def = PartLibrary[kind]
+        val def = if (symbol != null) CustomSymbols.def(symbol) else PartLibrary[kind]
         val part = Part(
             id = schematic.nextId,
             kind = kind,
-            ref = nextReference(schematic, kind),
+            ref = nextReference(schematic, def.refPrefix, kind),
             x = point.x,
             y = point.y,
             rotation = state.placingRotation,
             mirrored = state.placingMirrored,
             value = if (kind == PartKind.LABEL) nextLabel(schematic) else def.defaultValue,
+            symbol = symbol,
         )
         edit { it.copy(parts = it.parts + part) }
         if (kind == PartKind.LABEL) _state.update { it.copy(placing = null, editingPartId = part.id, selectedPartId = part.id) }
     }
 
-    private fun nextReference(schematic: Schematic, kind: PartKind): String {
-        val prefix = PartLibrary[kind].refPrefix
+    private fun nextReference(schematic: Schematic, prefix: String, kind: PartKind): String {
         if (kind == PartKind.GROUND) return prefix
-        val used = schematic.parts.filter { PartLibrary[it.kind].refPrefix == prefix }
+        val used = schematic.parts.filter { it.def.refPrefix == prefix }
             .mapNotNull { it.ref.removePrefix(prefix).toIntOrNull() }
         return prefix + ((used.maxOrNull() ?: 0) + 1)
     }
@@ -252,7 +301,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         val schematic = _state.value.circuit?.schematic ?: return
         val copy = part.copy(
             id = schematic.nextId,
-            ref = if (part.kind == PartKind.LABEL) part.ref else nextReference(schematic, part.kind),
+            ref = if (part.kind == PartKind.LABEL) part.ref else nextReference(schematic, part.def.refPrefix, part.kind),
             x = part.x + 2,
             y = part.y + 2,
         )
@@ -278,7 +327,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     private fun toggleProbe(point: GridPoint, hitPart: Part?, hitWire: Wire?) {
         val schematic = _state.value.circuit?.schematic ?: return
         val pinHit = hitPart?.pinPositions()?.firstOrNull { it == point }
-        if (hitPart != null && pinHit == null && Netlister.currentVector(hitPart) != null) {
+        if (hitPart != null && pinHit == null && Netlister.canProbeCurrent(hitPart)) {
             val existing = schematic.probes.firstOrNull { it.type == ProbeType.CURRENT && it.partId == hitPart.id }
             edit { s ->
                 s.copy(probes = if (existing != null) s.probes - existing else s.probes + Probe(ProbeType.CURRENT, partId = hitPart.id))
@@ -301,11 +350,11 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         val circuit = _state.value.circuit ?: return
         if (_state.value.running) return
         runJob = viewModelScope.launch {
-            _state.update { it.copy(running = true) }
+            _state.update { it.copy(running = true, runCount = it.runCount + 1) }
             try {
                 val dialect = circuit.dialect ?: defaultDialect
                 val result = if (circuit.kind == CircuitKind.SCHEMATIC) {
-                    val netlist = Netlister.netlist(circuit)
+                    val netlist = Netlister.netlist(circuit, container.library.index())
                     container.engine.run(netlist.text, dialect, netlist.probeVectors, netlist.warnings)
                 } else {
                     container.engine.run(circuit.netlist, dialect)
@@ -321,10 +370,63 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         runJob?.cancel()
     }
 
+    // ---- live simulation ----
+
+    fun setLive(enabled: Boolean, defaultDialect: SpiceDialect) {
+        liveDialect = defaultDialect
+        _state.update {
+            it.copy(live = enabled, liveView = if (enabled) it.liveView else null, liveError = null, inspectWireId = null, liveRunning = false)
+        }
+        if (enabled) scheduleLive(immediate = true) else liveJob?.cancel()
+    }
+
+    fun setLiveColorMode(mode: LiveColorMode) = _state.update { it.copy(liveColorMode = mode) }
+
+    private val stepDirective = Regex("""(?im)^\s*\.step\b""")
+
+    /** Re-simulates shortly after the last edit; a newer edit cancels a run still in progress. */
+    private fun scheduleLive(immediate: Boolean = false) {
+        liveJob?.cancel()
+        val generation = ++liveGeneration
+        liveJob = viewModelScope.launch {
+            if (!immediate) delay(LIVE_DEBOUNCE_MS)
+            val circuit = _state.value.circuit ?: return@launch
+            _state.update { it.copy(liveRunning = true) }
+            try {
+                val dialect = circuit.dialect ?: liveDialect
+                if (circuit.kind == CircuitKind.NETLIST) {
+                    val result = container.engine.run(circuit.netlist, dialect)
+                    _state.update { it.copy(result = result, traces = defaultTraces(result, it.traces), liveError = result.error) }
+                    return@launch
+                }
+                val netlist = Netlister.netlist(circuit, container.library.index(), live = true)
+                val result = container.engine.run(netlist.text, dialect, netlist.probeVectors, netlist.warnings)
+                val view = if (result.succeeded) withContext(Dispatchers.Default) { LiveView.build(circuit.schematic, netlist, result) } else null
+                // The live run doubles as the normal one when it is the same analysis.
+                val publish = result.succeeded && !stepDirective.containsMatchIn(circuit.schematic.directives) &&
+                    (netlist.liveAnalysis == AnalysisType.TRAN || circuit.analysis.type == AnalysisType.OP)
+                _state.update {
+                    it.copy(
+                        liveView = view,
+                        liveError = result.error ?: if (view == null) "Nothing to show yet: add parts and wires." else null,
+                        result = if (publish) result else it.result,
+                        traces = if (publish) defaultTraces(result, it.traces) else it.traces,
+                    )
+                }
+            } finally {
+                if (generation == liveGeneration) _state.update { it.copy(liveRunning = false) }
+            }
+        }
+    }
+
     fun toggleTrace(kind: PlotKind, vector: String) = _state.update {
         val current = it.traces[kind].orEmpty()
         val next = if (vector in current) current - vector else current + vector
         it.copy(traces = it.traces + (kind to next))
+    }
+
+    private companion object {
+        const val LIVE_DEBOUNCE_MS = 300L
     }
 
     private fun defaultTraces(result: SimulationResult, previous: Map<PlotKind, Set<String>>): Map<PlotKind, Set<String>> =

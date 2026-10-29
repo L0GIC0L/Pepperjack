@@ -40,4 +40,16 @@ class UserFlowTest {
         rule.onNodeWithContentDescription("Run simulation").performClick()
         rule.waitUntilAtLeastOneExists(hasText("AC Analysis"), timeoutMillis = 60_000)
     }
+
+    @Test
+    fun liveModeRunsAnExample() {
+        rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
+        rule.waitUntilAtLeastOneExists(hasText("Light switch (try live mode)"), timeoutMillis = 10_000)
+        rule.onNodeWithText("Light switch (try live mode)").performScrollTo().performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
+        rule.onNodeWithContentDescription("Live simulation").performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Stop live simulation"), timeoutMillis = 10_000)
+        rule.waitUntilAtLeastOneExists(hasText("Operating point"), timeoutMillis = 60_000)
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+    }
 }

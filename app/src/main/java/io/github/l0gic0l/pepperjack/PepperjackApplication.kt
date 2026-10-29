@@ -6,6 +6,7 @@ import io.github.l0gic0l.pepperjack.data.CircuitRepository
 import io.github.l0gic0l.pepperjack.data.CrashReporter
 import io.github.l0gic0l.pepperjack.data.ModelLibrary
 import io.github.l0gic0l.pepperjack.data.SettingsRepository
+import io.github.l0gic0l.pepperjack.data.SymbolRepository
 import io.github.l0gic0l.pepperjack.sim.SimulationEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ class PepperjackApplication : Application() {
 class AppContainer(context: Context) {
     val circuits = CircuitRepository(File(context.filesDir, "circuits"))
     val library = ModelLibrary(File(context.filesDir, "library"))
+    val symbols = SymbolRepository(File(context.filesDir, "symbols.json"))
     val settings = SettingsRepository(context)
     val engine = SimulationEngine(context, library.directory)
 

@@ -89,6 +89,8 @@ fun SchematicCanvas(
     probeColors: Map<Probe, Color>,
     onTap: (GridPoint, Part?, Wire?) -> Unit,
     onDoubleTap: (Part) -> Unit,
+    /** A part starts being dragged; it becomes the selection. */
+    onDragPart: (Part) -> Unit,
     onMovePart: (Long, Int, Int) -> Unit,
     onDrawWire: (GridPoint, GridPoint) -> Unit,
     modifier: Modifier = Modifier,
@@ -106,6 +108,7 @@ fun SchematicCanvas(
     val currentState by rememberUpdatedState(state)
     val tap by rememberUpdatedState(onTap)
     val doubleTap by rememberUpdatedState(onDoubleTap)
+    val dragPart by rememberUpdatedState(onDragPart)
     val movePart by rememberUpdatedState(onMovePart)
     val drawWire by rememberUpdatedState(onDrawWire)
 
@@ -206,7 +209,7 @@ fun SchematicCanvas(
                                 }
                                 if (mode == DragMode.MOVE_PART) {
                                     dragPartId = hitPart!!.id
-                                    tap(startPoint, hitPart, null)
+                                    dragPart(hitPart)
                                 }
                             }
                         }
@@ -305,7 +308,11 @@ fun SchematicCanvas(
         }
         state.placing?.let { kind ->
             val at = ghost ?: snap(Offset(size.width / 2f, size.height / 2f))
-            val preview = Part(-1, kind, "", at.x, at.y, state.placingRotation, state.placingMirrored)
+            val preview = Part(
+                -1, kind, "", at.x, at.y, state.placingRotation, state.placingMirrored,
+                value = state.placingSymbol?.params ?: io.github.l0gic0l.pepperjack.model.PartLibrary[kind].defaultValue,
+                symbol = state.placingSymbol,
+            )
             drawPart(preview, transform, colors.selection.copy(alpha = 0.6f), stroke, textMeasurer)
         }
     }

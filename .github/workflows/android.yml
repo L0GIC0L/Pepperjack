@@ -60,10 +60,10 @@ jobs:
           sudo apt-get update -q && sudo apt-get install -y -q ngspice
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" "cmake;3.31.6" "platforms;android-37.0" > /dev/null
       - name: Export example netlists
-        run: ./gradlew --stacktrace testDebugUnitTest --tests '*ExampleNetlistExport*'
+        run: ./gradlew --stacktrace testDebugUnitTest --tests '*ExampleNetlistExport*' --tests '*ModelZoo*'
         env:
           PEPPERJACK_EXPORT_DIR: ${{ runner.temp }}/netlists
-      - name: Run every example through ngspice
+      - name: Run every example and built-in model through ngspice
         run: scripts/check-netlists.sh "${{ runner.temp }}/netlists"
 
   emulator:

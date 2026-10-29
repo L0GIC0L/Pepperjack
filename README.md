@@ -12,6 +12,11 @@ for foldables.
   <img src="docs/screenshots/editor-phone-clip.png" width="200" alt="Schematic editor in dark theme">
 </p>
 <img src="docs/screenshots/editor-unfolded-mosfet.png" width="620" alt="Editor and results side by side on an unfolded foldable">
+<p>
+  <img src="docs/screenshots/live-view.png" width="200" alt="Live simulation: wires coloured by voltage, current dots, a glowing LED and meter readings">
+  <img src="docs/screenshots/symbol-editor.png" width="200" alt="Symbol editor making an amplifier symbol for a vendor op-amp">
+  <img src="docs/screenshots/symbols.png" width="200" alt="The built-in symbols">
+</p>
 
 ## Features
 
@@ -40,12 +45,47 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 - `.step` (`list`, linear, `oct`, `dec`; parameters and sources) runs one
   simulation per value and overlays the traces.
 
+**Live simulation**
+- Tap the bolt to simulate as you edit: every change re-runs ngspice.
+- Wires are coloured by voltage (green positive, red negative) or by current,
+  and dots flow along them at a speed set by the current. The currents come
+  from measuring every pin, so they obey Kirchhoff's current law at every
+  junction.
+- LEDs glow with their current, and ammeters and voltmeters show their
+  reading on their face. Tap a wire to read its node voltage and current.
+- Interactive parts: tap a toggle or changeover switch to flip it, and drag
+  the slider of a selected potentiometer.
+- Transients play back in slow motion, with pause, restart and 0.1×–4× speed;
+  the plots update too.
+
 **Schematic editor**
-- 22 parts: R, L, C, voltage and current sources (DC, AC, sine, pulse, any
-  SPICE source), diode, zener, LED, NPN, PNP, N/P MOSFETs, ideal and
-  rail-limited op-amps, E/G/H/F controlled sources, behavioral source, switch,
-  ground and net labels — with generic models such as 2N3904, 2N2222, 1N4148,
-  1N4007, 2N7000 and IRFZ44N.
+- 45 symbols:
+  - Passives: R, L, C, potentiometer, transformer, crystal.
+  - Sources: voltage and current sources (DC, AC, sine, pulse, any SPICE
+    source).
+  - Switches and meters: toggle and changeover switches, ammeter, voltmeter.
+  - Semiconductors: diode, Schottky, zener, LED, NPN, PNP, N/P JFETs, N/P
+    MOSFETs.
+  - ICs: ideal op-amp, op-amp, comparator, fixed and adjustable regulators,
+    555 timer, optocoupler.
+  - Digital logic: AND, NAND, OR, NOR, XOR, inverter, Schmitt inverter, D
+    flip-flop.
+  - Controlled and behavioral sources, voltage-controlled switch, ground and
+    net labels.
+- About 110 built-in models, each with a short datasheet summary in the model
+  picker:
+  - Diodes, Schottkys, zeners and LEDs.
+  - 2N3904/2N2222/BC547/TIP31/2N3055-class transistors and TIP120 Darlingtons.
+  - JFETs, and small-signal to power MOSFETs.
+  - LM358, TL072, NE5532, OPA2134 and MCP6002 op-amps.
+  - LM393/LM311 comparators.
+  - 78xx/79xx, LM317/LM337 and LDO regulators.
+  - NE555/TLC555, PC817/4N35, and crystals.
+
+  Discretes use datasheet-typical parameters. ICs are behavioural
+  macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
+  output swing, dropout, current limit and propagation delay. Every model is
+  checked in ngspice on each commit.
 - Drag or tap-tap wiring, rubber-band moves, rotate, mirror, duplicate,
   undo/redo, junction dots and open-pin markers.
 - Probe tool: tap a wire for its voltage or a part for its current; probes take
@@ -56,7 +96,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 **Netlists and models**
 - Syntax-highlighted netlist editor; import `.cir`, `.net`, `.sp` and LTspice
   netlist exports (View → SPICE Netlist), or open them from a file manager.
-- Model library: add vendor `.lib`, `.mod`, `.sub` files and `.include` them.
+- Model library: add vendor `.lib`, `.mod`, `.sub` files, then type a model's
+  name as a part's model. The file is included automatically, and the model
+  picker lists the library models that fit each symbol.
+- Symbol editor: make a symbol for any library subcircuit, the way LTspice
+  generates block symbols. It starts from an automatic arrangement (supplies
+  on top and bottom, inputs left, outputs right). You can then choose a block
+  or amplifier body and move each pin to any side and position. Your symbols
+  appear in the part picker.
 - Export any netlist, and any plot as CSV.
 
 **Results**
@@ -126,7 +173,7 @@ these repository secrets:
 | --- | --- |
 | `app/src/main/java/.../model` | Circuit data, part symbols and pins |
 | `app/src/main/java/.../spice` | Netlister, built-in models, LTspice translation and `.step` |
-| `app/src/main/java/.../sim` | ngspice engine wrapper and result types |
+| `app/src/main/java/.../sim` | ngspice engine wrapper, result types, and the live view's wire-current solver |
 | `app/src/main/cpp` | JNI bridge that `dlopen`s `libngspice.so` |
 | `app/src/main/java/.../ui` | Compose screens, schematic canvas, charts, adaptive layout |
 | `scripts/build-ngspice-android.sh` | Cross-compiles ngspice and its code models with the NDK |

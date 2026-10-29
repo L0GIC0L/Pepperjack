@@ -46,6 +46,8 @@ data class Part(
     val rotation: Int = 0,
     val mirrored: Boolean = false,
     val value: String = "",
+    /** The symbol of a [PartKind.CUSTOM] part (a library subcircuit). */
+    val symbol: CustomSymbol? = null,
 ) {
     val origin: GridPoint get() = GridPoint(x, y)
 }

@@ -15,13 +15,15 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import io.github.l0gic0l.pepperjack.model.GlyphAlign
 import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
+import io.github.l0gic0l.pepperjack.model.PartCategory
 import io.github.l0gic0l.pepperjack.model.PartKind
-import io.github.l0gic0l.pepperjack.model.PartLibrary
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.Shape
 import io.github.l0gic0l.pepperjack.model.bounds
+import io.github.l0gic0l.pepperjack.model.def
 import io.github.l0gic0l.pepperjack.model.transformPoint
 import io.github.l0gic0l.pepperjack.ui.theme.CircuitColors
 
@@ -74,13 +76,13 @@ fun DrawScope.drawPart(
     dx: Float = 0f,
     dy: Float = 0f,
 ) {
-    val def = PartLibrary[part.kind]
+    val def = part.def
     fun point(x: Float, y: Float): Offset {
         val (tx, ty) = transformPoint(x, y, part.rotation, part.mirrored)
         return transform.toScreen(part.x + dx + tx, part.y + dy + ty)
     }
     val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-    for (shape in def.shapes) {
+    for (shape in def.shapesFor(part.value)) {
         when (shape) {
             is Shape.Line -> drawLine(color, point(shape.x1, shape.y1), point(shape.x2, shape.y2), strokeWidth, StrokeCap.Round)
             is Shape.Poly -> {
@@ -99,13 +101,24 @@ fun DrawScope.drawPart(
                 center = point(shape.cx, shape.cy),
                 style = if (shape.filled) Fill else stroke,
             )
-            is Shape.Glyph -> if (textMeasurer != null) {
+            is Shape.Glyph -> if (textMeasurer != null && transform.scale * shape.size >= 5.dp.toPx()) {
                 val layout = textMeasurer.measure(
                     shape.text,
-                    TextStyle(color = color, fontSize = (transform.scale * 0.9f).toSp(), fontWeight = FontWeight.Bold),
+                    TextStyle(
+                        color = color,
+                        fontSize = (transform.scale * shape.size).toSp(),
+                        fontWeight = if (shape.bold) FontWeight.Bold else FontWeight.Normal,
+                    ),
                 )
-                val center = point(shape.x, shape.y)
-                drawText(layout, topLeft = center - Offset(layout.size.width / 2f, layout.size.height / 2f))
+                val anchor = point(shape.x, shape.y)
+                // Text stays upright; alignment follows the mirrored/rotated x direction of the symbol.
+                val (dirX, _) = transformPoint(1f, 0f, part.rotation, part.mirrored)
+                val start = when (shape.align) {
+                    GlyphAlign.CENTER -> 0.5f
+                    GlyphAlign.START -> if (dirX < -0.5f) 1f else if (dirX > 0.5f) 0f else 0.5f
+                    GlyphAlign.END -> if (dirX < -0.5f) 0f else if (dirX > 0.5f) 1f else 0.5f
+                }
+                drawText(layout, topLeft = anchor - Offset(layout.size.width * start, layout.size.height / 2f))
             }
         }
     }
@@ -149,7 +162,7 @@ fun DrawScope.drawPartLabels(
         else -> Unit
     }
     val ref = textMeasurer.measure(part.ref, style.copy(fontWeight = FontWeight.Medium))
-    val value = part.value.takeIf { it.isNotBlank() }?.let { textMeasurer.measure(it.take(40), style) }
+    val value = displayValue(part)?.let { textMeasurer.measure(it.take(40), style) }
     val vertical = (bottom - top) >= (right - left)
     if (vertical) {
         val x = transform.toScreen(right + 0.4f, 0f).x
@@ -166,6 +179,15 @@ fun DrawScope.drawPartLabels(
             drawText(it, topLeft = Offset(cx - it.size.width / 2f, below))
         }
     }
+}
+
+/** The value text shown beside a part, or null when the symbol already shows it. */
+fun displayValue(part: Part): String? = when {
+    part.kind == PartKind.SPST || part.kind == PartKind.SPDT || part.kind == PartKind.AMMETER -> null
+    part.kind == PartKind.VOLTMETER && part.value.trim().let { it.isEmpty() || it.equals("10Meg", true) } -> null
+    part.kind == PartKind.CUSTOM -> listOfNotNull(part.symbol?.title, part.value.takeIf { it.isNotBlank() }).joinToString(" ")
+    part.def.category == PartCategory.DIGITAL -> part.value.trim().takeIf { it.isNotEmpty() && it != "5" }?.let { "$it V" }
+    else -> part.value.takeIf { it.isNotBlank() }
 }
 
 /** A compact, label-free rendering used for thumbnails and the parts palette. */

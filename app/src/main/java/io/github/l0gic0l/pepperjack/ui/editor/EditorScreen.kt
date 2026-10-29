@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.DataObject
 import androidx.compose.material.icons.outlined.Edit
@@ -28,6 +30,8 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
@@ -58,6 +62,7 @@ import io.github.l0gic0l.pepperjack.data.Settings
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.PartLibrary
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.sim.Plot
 import io.github.l0gic0l.pepperjack.sim.PlotKind
@@ -66,6 +71,10 @@ import io.github.l0gic0l.pepperjack.spice.Netlister
 import io.github.l0gic0l.pepperjack.ui.common.writeText
 import io.github.l0gic0l.pepperjack.ui.results.ResultsPane
 import io.github.l0gic0l.pepperjack.ui.results.plotsToCsv
+import io.github.l0gic0l.pepperjack.ui.live.LiveAnimator
+import io.github.l0gic0l.pepperjack.ui.live.LiveBar
+import io.github.l0gic0l.pepperjack.ui.live.LiveOverlay
+import io.github.l0gic0l.pepperjack.ui.live.PotControl
 import io.github.l0gic0l.pepperjack.ui.results.traceColor
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicCanvas
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicViewport
@@ -99,11 +108,19 @@ fun EditorScreen(container: AppContainer, settings: Settings, circuitId: String,
     var compactPane by rememberSaveable { mutableStateOf(if (isSchematic) Pane.SCHEMATIC else Pane.NETLIST) }
     var editorPane by rememberSaveable { mutableStateOf(if (isSchematic) Pane.SCHEMATIC else Pane.NETLIST) }
     val layout = currentPaneLayout()
-    val netlist: NetlistResult? = remember(circuit) { if (isSchematic) Netlister.netlist(circuit) else null }
+    val libraryFiles by container.library.files.collectAsStateWithLifecycle()
+    val symbols by container.symbols.symbols.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        container.library.refresh()
+        container.symbols.load()
+    }
+    val libraryIndex = remember(libraryFiles) { container.library.index() }
+    val netlist: NetlistResult? = remember(circuit, libraryIndex) { if (isSchematic) Netlister.netlist(circuit, libraryIndex) else null }
     val run = { viewModel.run(settings.dialect) }
 
-    LaunchedEffect(state.result) {
-        if (state.result != null && layout == PaneLayout.COMPACT) compactPane = Pane.RESULTS
+    // Only runs started with the Run button jump to the results; live updates stay on the schematic.
+    LaunchedEffect(state.runCount) {
+        if (state.runCount > 0 && layout == PaneLayout.COMPACT) compactPane = Pane.RESULTS
     }
     BackHandler(enabled = state.placing != null || state.wireStart != null || state.selectedPartId != null || state.selectedWireId != null) {
         when {
@@ -154,6 +171,16 @@ fun EditorScreen(container: AppContainer, settings: Settings, circuitId: String,
                     }
                 },
                 actions = {
+                    IconToggleButton(
+                        checked = state.live,
+                        onCheckedChange = { viewModel.setLive(it, settings.dialect) },
+                        colors = IconButtonDefaults.iconToggleButtonColors(
+                            checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        ),
+                    ) {
+                        Icon(Icons.Outlined.Bolt, contentDescription = if (state.live) "Stop live simulation" else "Live simulation")
+                    }
                     IconButton(onClick = { sheet = EditorSheet.ANALYSIS }) {
                         Icon(Icons.Outlined.Tune, contentDescription = "Simulation settings")
                     }
@@ -250,10 +277,10 @@ fun EditorScreen(container: AppContainer, settings: Settings, circuitId: String,
     }
 
     when (sheet) {
-        EditorSheet.PARTS -> PartPickerSheet(onDismiss = { sheet = null }) { kind ->
+        EditorSheet.PARTS -> PartPickerSheet(symbols, onDismiss = { sheet = null }) { choice ->
             sheet = null
             if (layout == PaneLayout.COMPACT) compactPane = Pane.SCHEMATIC else editorPane = Pane.SCHEMATIC
-            viewModel.startPlacing(kind)
+            viewModel.startPlacing(choice)
         }
         EditorSheet.ANALYSIS -> AnalysisSheet(
             config = circuit.analysis,
@@ -287,7 +314,7 @@ fun EditorScreen(container: AppContainer, settings: Settings, circuitId: String,
 
     state.editingPartId?.let { id ->
         circuit.schematic.parts.firstOrNull { it.id == id }?.let { part ->
-            PartEditorSheet(part, onDismiss = { viewModel.openEditor(null) }) { ref, value ->
+            PartEditorSheet(part, libraryFiles.flatMap { it.models }, onDismiss = { viewModel.openEditor(null) }) { ref, value ->
                 viewModel.updatePart(part.id, ref, value)
                 viewModel.openEditor(null)
             }
@@ -314,6 +341,10 @@ private fun SchematicPane(
     viewModel: EditorViewModel,
     onParts: () -> Unit,
 ) {
+    val liveView = state.liveView.takeIf { state.live }
+    var lastAnimator by remember { mutableStateOf<LiveAnimator?>(null) }
+    val animator = remember(liveView) { liveView?.let { LiveAnimator(it, lastAnimator) } }
+    LaunchedEffect(animator) { if (animator != null) lastAnimator = animator }
     Box(Modifier.fillMaxSize()) {
         SchematicCanvas(
             schematic = circuit.schematic,
@@ -323,15 +354,19 @@ private fun SchematicPane(
             probeColors = probeColors,
             onTap = viewModel::tap,
             onDoubleTap = { viewModel.openEditor(it.id) },
+            onDragPart = { viewModel.select(it.id) },
             onMovePart = viewModel::movePart,
             onDrawWire = viewModel::addWire,
             modifier = Modifier.fillMaxSize(),
         )
+        if (animator != null) {
+            LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize())
+        }
         val topBar = Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 12.dp, end = 12.dp)
         val selected = state.selectedPart
         when {
             state.placing != null -> PlacingBar(
-                state.placing,
+                state.placingSymbol?.title ?: PartLibrary[state.placing].title,
                 onRotate = viewModel::rotatePlacing,
                 onMirror = viewModel::mirrorPlacing,
                 onDone = viewModel::stopPlacing,
@@ -355,18 +390,30 @@ private fun SchematicPane(
             )
             state.tool == Tool.PROBE -> HintBar("Tap a wire for its voltage or a part for its current", topBar)
             state.tool == Tool.DELETE -> HintBar("Tap a part or wire to delete it", topBar)
+            state.live && circuit.schematic.parts.isNotEmpty() -> HintBar("Live: tap a switch to flip it, or a wire to read it", topBar)
             circuit.schematic.parts.isEmpty() -> HintBar("Tap + to place your first part", topBar)
         }
-        EditorToolbar(
-            tool = state.tool,
-            canUndo = state.canUndo,
-            canRedo = state.canRedo,
-            onTool = viewModel::setTool,
-            onParts = onParts,
-            onUndo = viewModel::undo,
-            onRedo = viewModel::redo,
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp, start = 12.dp, end = 12.dp),
-        )
+        Column(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp, start = 12.dp, end = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (state.live) {
+                selected?.takeIf { it.kind == PartKind.POT }?.let { pot ->
+                    PotControl(pot, onPosition = { viewModel.setPotPosition(pot.id, it) })
+                }
+                LiveBar(animator, state.liveRunning, state.liveError, state.liveColorMode, viewModel::setLiveColorMode)
+            }
+            EditorToolbar(
+                tool = state.tool,
+                canUndo = state.canUndo,
+                canRedo = state.canRedo,
+                onTool = viewModel::setTool,
+                onParts = onParts,
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+            )
+        }
     }
 }
 

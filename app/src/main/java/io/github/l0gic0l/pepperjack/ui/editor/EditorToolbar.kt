@@ -45,8 +45,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.l0gic0l.pepperjack.model.Part
-import io.github.l0gic0l.pepperjack.model.PartKind
-import io.github.l0gic0l.pepperjack.model.PartLibrary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,10 +116,10 @@ fun EditorToolbar(
 
 /** Context bar for the part being placed. */
 @Composable
-fun PlacingBar(kind: PartKind, onRotate: () -> Unit, onMirror: () -> Unit, onDone: () -> Unit, modifier: Modifier = Modifier) {
+fun PlacingBar(title: String, onRotate: () -> Unit, onMirror: () -> Unit, onDone: () -> Unit, modifier: Modifier = Modifier) {
     ContextSurface(modifier) {
         Text(
-            "Placing ${PartLibrary[kind].title.lowercase()} — tap or drag to drop",
+            "Placing ${title.replaceFirstChar { it.lowercase() }} — tap or drag to drop",
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

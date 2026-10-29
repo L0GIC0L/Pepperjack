@@ -44,14 +44,18 @@ class Vector(
     val isComplex: Boolean get() = imag != null
 
     /**
-     * Device-internal nodes ("m1#gate") and anything inside a subcircuit ("xu1.n1");
-     * hidden from the trace list.
+     * Device-internal nodes ("m1#gate"), anything inside a subcircuit ("xu1.n1"), and the
+     * meters and nodes Pepperjack adds itself ("vpj_3_0#branch", "pj_3_0"); hidden from the trace list.
      */
-    val isInternal: Boolean get() = '.' in name || ('#' in name && !name.endsWith("#branch"))
+    val isInternal: Boolean
+        get() = '.' in name || ('#' in name && !name.endsWith("#branch")) ||
+            name.startsWith("vpj_") || name.startsWith("pj_")
 
     /** What LTspice would call the trace: V(out), I(V1), I(R1). */
     val label: String
         get() = when {
+            name.startsWith("vprobe_") && name.endsWith("#branch") ->
+                "I(${name.removePrefix("vprobe_").removeSuffix("#branch").uppercase()})"
             name.endsWith("#branch") -> "I(${name.removeSuffix("#branch").uppercase()})"
             name.startsWith("@") -> {
                 val device = name.substringAfter('@').substringBefore('[')

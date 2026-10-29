@@ -24,7 +24,12 @@ private enum class HomeTab(val label: String, val icon: ImageVector) {
 
 /** Top-level destinations; the navigation suite switches between a bar, rail and drawer by window size. */
 @Composable
-fun HomeScreen(container: AppContainer, settings: Settings, onOpenCircuit: (String) -> Unit) {
+fun HomeScreen(
+    container: AppContainer,
+    settings: Settings,
+    onOpenCircuit: (String) -> Unit,
+    onEditSymbol: SymbolEditorLauncher,
+) {
     var tab by rememberSaveable { mutableStateOf(HomeTab.CIRCUITS) }
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -40,7 +45,7 @@ fun HomeScreen(container: AppContainer, settings: Settings, onOpenCircuit: (Stri
     ) {
         when (tab) {
             HomeTab.CIRCUITS -> CircuitsScreen(container, onOpenCircuit)
-            HomeTab.MODELS -> ModelsScreen(container)
+            HomeTab.MODELS -> ModelsScreen(container, onEditSymbol)
             HomeTab.SETTINGS -> SettingsScreen(container, settings)
         }
     }

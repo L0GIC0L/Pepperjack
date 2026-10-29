@@ -7,6 +7,8 @@ import io.github.l0gic0l.pepperjack.data.Examples
 import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
 import io.github.l0gic0l.pepperjack.sim.EngineStatus
+import io.github.l0gic0l.pepperjack.sim.LiveView
+import io.github.l0gic0l.pepperjack.spice.ModelZoo
 import io.github.l0gic0l.pepperjack.spice.Netlister
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -44,6 +46,37 @@ class EngineInstrumentedTest {
                 )
             }
         }
+    }
+
+    /** Live netlists of every schematic example simulate and map onto their wires. */
+    @Test
+    fun liveViewForEverySchematicExample() = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        for (example in Examples.all) {
+            val circuit = example.build()
+            if (circuit.kind != CircuitKind.SCHEMATIC) continue
+            val netlist = Netlister.netlist(circuit, live = true)
+            val result = container.engine.run(netlist.text, circuit.dialect ?: SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            assertTrue("${example.title}: ${result.error}", result.succeeded)
+            val view = LiveView.build(circuit.schematic, netlist, result)
+            Log.i(TAG, "${example.title} live: ${view?.segments?.size} segments, ${view?.samples} samples, max ${view?.maxCurrent} A")
+            assertTrue(example.title, view != null && view.segments.isNotEmpty() && view.maxCurrent > 0)
+        }
+    }
+
+    /** Every built-in model on the device's ngspice, including the XSPICE logic and 555 models. */
+    @Test
+    fun everyBuiltInModelSimulates() = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        for (circuit in ModelZoo.benches()) {
+            for (live in listOf(false, true)) {
+                val netlist = Netlister.netlist(circuit, live = live)
+                val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+                result.log.filter { it.isError }.forEach { Log.w(TAG, "  ${circuit.name}: ${it.text}") }
+                assertTrue("${circuit.name} (live=$live): ${result.error}", result.succeeded)
+            }
+        }
+        Log.i(TAG, "Simulated ${ModelZoo.benches().size} model benches, plain and live")
     }
 
     private companion object {

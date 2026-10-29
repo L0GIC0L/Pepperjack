@@ -1,6 +1,7 @@
 package io.github.l0gic0l.pepperjack.ui.editor
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -34,13 +36,17 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,22 +63,46 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.l0gic0l.pepperjack.data.LibraryModel
 import io.github.l0gic0l.pepperjack.model.AnalysisConfig
 import io.github.l0gic0l.pepperjack.model.AnalysisType
+import io.github.l0gic0l.pepperjack.model.CustomSymbol
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartCategory
 import io.github.l0gic0l.pepperjack.model.PartDef
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
+import io.github.l0gic0l.pepperjack.model.PotValue
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
+import io.github.l0gic0l.pepperjack.model.SwitchValue
+import io.github.l0gic0l.pepperjack.model.TransformerValue
+import io.github.l0gic0l.pepperjack.model.ValueEditor
+import io.github.l0gic0l.pepperjack.model.def
+import io.github.l0gic0l.pepperjack.spice.ModelFamily
+import io.github.l0gic0l.pepperjack.spice.SpiceModels
+import kotlin.math.roundToInt
 import io.github.l0gic0l.pepperjack.ui.schematic.drawSchematicPreview
 import io.github.l0gic0l.pepperjack.ui.theme.LocalCircuitColors
 
+/** A part to place: a built-in symbol, or a user-made symbol for a library subcircuit. */
+data class PartChoice(val kind: PartKind, val symbol: CustomSymbol? = null)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PartPickerSheet(onDismiss: () -> Unit, onPick: (PartKind) -> Unit) {
+fun PartPickerSheet(symbols: List<CustomSymbol>, onDismiss: () -> Unit, onPick: (PartChoice) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val q = query.trim().lowercase()
+    fun matches(title: String, extra: String = "") = q.isEmpty() || title.lowercase().contains(q) || extra.lowercase().contains(q)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Search parts and models") },
+            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        )
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 96.dp),
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp),
@@ -80,6 +110,10 @@ fun PartPickerSheet(onDismiss: () -> Unit, onPick: (PartKind) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             PartCategory.entries.forEach { category ->
+                val defs = PartLibrary.all.filter { it.category == category }
+                    .filter { def -> matches(def.title, def.models.joinToString(" ") { it.name }) }
+                val custom = if (category == PartCategory.CUSTOM) symbols.filter { matches(it.title, it.subckt) } else emptyList()
+                if (defs.isEmpty() && custom.isEmpty()) return@forEach
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         category.title,
@@ -88,8 +122,23 @@ fun PartPickerSheet(onDismiss: () -> Unit, onPick: (PartKind) -> Unit) {
                         modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 4.dp),
                     )
                 }
-                items(PartLibrary.all.filter { it.category == category }, key = { it.kind }) { def ->
-                    PartTile(def) { onPick(def.kind) }
+                items(defs, key = { it.kind }) { def ->
+                    PartTile(def.title, Part(0, def.kind, "", 0, 0, value = def.defaultValue)) { onPick(PartChoice(def.kind)) }
+                }
+                items(custom, key = { "symbol-" + it.id }) { symbol ->
+                    PartTile(symbol.title, Part(0, PartKind.CUSTOM, "", 0, 0, symbol = symbol)) {
+                        onPick(PartChoice(PartKind.CUSTOM, symbol))
+                    }
+                }
+            }
+            if (q.isEmpty() && symbols.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        "Make symbols for vendor subcircuits in the Model library; they appear here.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp, top = 12.dp),
+                    )
                 }
             }
         }
@@ -97,19 +146,19 @@ fun PartPickerSheet(onDismiss: () -> Unit, onPick: (PartKind) -> Unit) {
 }
 
 @Composable
-private fun PartTile(def: PartDef, onClick: () -> Unit) {
+private fun PartTile(title: String, preview: Part, onClick: () -> Unit) {
     val colors = LocalCircuitColors.current
     val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
-    val preview = remember(def.kind) { Schematic(parts = listOf(Part(0, def.kind, "", 0, 0))) }
+    val sheet = remember(preview) { Schematic(parts = listOf(preview)) }
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
-            Canvas(Modifier.size(56.dp)) { drawSchematicPreview(preview, colors, textMeasurer) }
+            Canvas(Modifier.size(56.dp)) { drawSchematicPreview(sheet, colors, textMeasurer) }
             Text(
-                def.title,
+                title,
                 style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
@@ -122,14 +171,37 @@ private fun PartTile(def: PartDef, onClick: () -> Unit) {
 
 private val suffixes = listOf("p", "n", "u", "m", "k", "Meg")
 
+/** Whether a model from the user's library fits [this] symbol. */
+fun PartDef.accepts(model: LibraryModel): Boolean {
+    if (model.isSubckt) return model.pins.size == pins.size && editor == ValueEditor.MODEL
+    val types = families.flatMap { family ->
+        when (family) {
+            ModelFamily.DIODE, ModelFamily.SCHOTTKY, ModelFamily.ZENER, ModelFamily.LED -> listOf("D")
+            ModelFamily.NPN -> listOf("NPN")
+            ModelFamily.PNP -> listOf("PNP")
+            ModelFamily.NJF -> listOf("NJF")
+            ModelFamily.PJF -> listOf("PJF")
+            ModelFamily.NMOS -> listOf("NMOS", "VDMOS")
+            ModelFamily.PMOS -> listOf("PMOS", "VDMOS")
+            ModelFamily.SWITCH -> listOf("SW")
+            else -> emptyList()
+        }
+    }
+    return model.type in types
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun PartEditorSheet(part: Part, onDismiss: () -> Unit, onSave: (ref: String, value: String) -> Unit) {
-    val def = PartLibrary[part.kind]
+fun PartEditorSheet(
+    part: Part,
+    libraryModels: List<LibraryModel>,
+    onDismiss: () -> Unit,
+    onSave: (ref: String, value: String) -> Unit,
+) {
+    val def = part.def
     var ref by remember(part.id) { mutableStateOf(part.ref) }
-    var value by remember(part.id) { mutableStateOf(part.value) }
+    var value by remember(part.id) { mutableStateOf(part.value.ifBlank { if (def.editor == ValueEditor.MODEL) def.defaultValue else part.value }) }
     var source by remember(part.id) { mutableStateOf(SourceSpec.parse(part.value)) }
-    val isSource = part.kind == PartKind.VOLTAGE || part.kind == PartKind.CURRENT
     val unit = if (part.kind == PartKind.CURRENT) "A" else "V"
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -147,27 +219,58 @@ fun PartEditorSheet(part: Part, onDismiss: () -> Unit, onSave: (ref: String, val
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            when {
-                part.kind == PartKind.GROUND -> Text("Ground is SPICE node 0, the reference for every voltage.")
-                part.kind == PartKind.OPAMP -> Text("Ideal op-amp: open-loop gain of 10⁶, no bandwidth or supply limits.")
-                part.kind == PartKind.OPAMP5 -> Text(
-                    "Single-pole op-amp: 100 dB open-loop gain, 10 MHz gain-bandwidth, output limited to the V+ and V− rails.",
+            when (def.editor) {
+                ValueEditor.NONE -> Text(
+                    when (part.kind) {
+                        PartKind.GROUND -> "Ground is SPICE node 0, the reference for every voltage."
+                        PartKind.OPAMP -> "Ideal op-amp: open-loop gain of 10⁶, no bandwidth or supply limits."
+                        PartKind.AMMETER -> "Measures the current flowing in at the + pin, with zero resistance. " +
+                            "The reading shows while live simulating; probe it to plot the current."
+                        else -> def.valueHint
+                    },
                 )
-                isSource -> SourceEditor(source, unit) { source = it }
-                def.models.isNotEmpty() -> {
+                ValueEditor.SOURCE -> SourceEditor(source, unit) { source = it }
+                ValueEditor.MODEL -> ModelPicker(def, value, libraryModels) { value = it }
+                ValueEditor.POT -> {
+                    val pot = PotValue.parse(value)
                     OutlinedTextField(
-                        value = value,
-                        onValueChange = { value = it },
-                        label = { Text(def.valueLabel) },
-                        supportingText = { Text("${def.valueHint}. Built-in models below; vendor models from the Model library.") },
+                        value = pot.resistance,
+                        onValueChange = { value = pot.copy(resistance = it.trim()).format() },
+                        label = { Text("Total resistance") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        def.models.forEach { model ->
-                            FilterChip(selected = value.equals(model, true), onClick = { value = model }, label = { Text(model) })
+                    Text("Wiper position: ${(pot.position * 100).roundToInt()}% from pin 1", style = MaterialTheme.typography.bodyMedium)
+                    Slider(value = pot.position.toFloat(), onValueChange = { value = pot.copy(position = it.toDouble()).format() })
+                }
+                ValueEditor.TRANSFORMER -> {
+                    val t = TransformerValue.parse(value)
+                    NumberField("Primary inductance", t.primary) { value = t.copy(primary = it.trim()).format() }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        NumberField("Primary turns", fmtTurns(t.primaryTurns), Modifier.weight(1f)) { text ->
+                            text.toDoubleOrNull()?.takeIf { it > 0 }?.let { value = t.copy(primaryTurns = it).format() }
+                        }
+                        NumberField("Secondary turns", fmtTurns(t.secondaryTurns), Modifier.weight(1f)) { text ->
+                            text.toDoubleOrNull()?.takeIf { it > 0 }?.let { value = t.copy(secondaryTurns = it).format() }
                         }
                     }
+                    NumberField("Coupling k (0–1)", t.coupling) { value = t.copy(coupling = it.trim()).format() }
+                    Text(
+                        "Secondary inductance ${t.secondary()}. Each winding needs a DC path to ground.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ValueEditor.SPST -> Choice(listOf("open" to "Open", "closed" to "Closed"), if (SwitchValue.isClosed(value)) "closed" else "open") { value = it }
+                ValueEditor.SPDT -> Choice(listOf("A" to "COM to A", "B" to "COM to B"), if (SwitchValue.isB(value)) "B" else "A") { value = it }
+                ValueEditor.LOGIC -> {
+                    NumberField(def.valueLabel, value) { value = it }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("1.8", "3.3", "5", "12").forEach { v ->
+                            FilterChip(selected = value.trim() == v, onClick = { value = v }, label = { Text("$v V") })
+                        }
+                    }
+                    Text(def.valueHint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 else -> {
                     OutlinedTextField(
@@ -175,13 +278,13 @@ fun PartEditorSheet(part: Part, onDismiss: () -> Unit, onSave: (ref: String, val
                         onValueChange = { value = it },
                         label = { Text(def.valueLabel) },
                         supportingText = { Text(def.valueHint) },
-                        singleLine = part.kind != PartKind.BEHAVIORAL,
+                        singleLine = def.editor != ValueEditor.EXPRESSION,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            fontFamily = if (part.kind == PartKind.BEHAVIORAL) FontFamily.Monospace else FontFamily.Default,
+                            fontFamily = if (def.editor == ValueEditor.EXPRESSION) FontFamily.Monospace else FontFamily.Default,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (part.kind in setOf(PartKind.RESISTOR, PartKind.CAPACITOR, PartKind.INDUCTOR)) {
+                    if (part.kind in setOf(PartKind.RESISTOR, PartKind.CAPACITOR, PartKind.INDUCTOR, PartKind.VOLTMETER)) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             suffixes.forEach { suffix ->
                                 AssistChip(
@@ -200,9 +303,9 @@ fun PartEditorSheet(part: Part, onDismiss: () -> Unit, onSave: (ref: String, val
                 TextButton(onClick = onDismiss) { Text("Cancel") }
                 Spacer(Modifier.size(8.dp))
                 Button(onClick = {
-                    val newValue = when {
-                        isSource -> source.toSpice()
-                        part.kind == PartKind.LABEL -> value.trim().ifEmpty { "net" }
+                    val newValue = when (def.editor) {
+                        ValueEditor.SOURCE -> source.toSpice()
+                        ValueEditor.LABEL -> value.trim().ifEmpty { "net" }
                         else -> value
                     }
                     onSave(if (part.kind == PartKind.LABEL) newValue else ref, newValue)
@@ -210,6 +313,73 @@ fun PartEditorSheet(part: Part, onDismiss: () -> Unit, onSave: (ref: String, val
             }
         }
     }
+}
+
+private fun fmtTurns(value: Double): String =
+    if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+
+@Composable
+private fun Choice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, (key, label) ->
+            SegmentedButton(
+                selected = selected == key,
+                onClick = { onSelect(key) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size),
+                label = { Text(label) },
+            )
+        }
+    }
+}
+
+/** Model name field plus a browsable list of built-in and library models that fit the symbol. */
+@Composable
+private fun ModelPicker(def: PartDef, value: String, libraryModels: List<LibraryModel>, onChange: (String) -> Unit) {
+    val current = value.trim().substringBefore(' ')
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(def.valueLabel) },
+        supportingText = { Text("Pick a model below, or type any model name defined in your directives or library.") },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    val fromLibrary = libraryModels.filter { def.accepts(it) }
+    def.families.forEach { family ->
+        val models = SpiceModels.family(family)
+        if (models.isEmpty()) return@forEach
+        Text(family.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+            Column {
+                models.forEach { model ->
+                    ModelRow(model.name, model.description, model.name.equals(current, true)) { onChange(model.name) }
+                }
+            }
+        }
+    }
+    if (fromLibrary.isNotEmpty()) {
+        Text("From your model library", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+            Column {
+                fromLibrary.forEach { model ->
+                    val detail = if (model.isSubckt) "${model.file} · subcircuit (${model.pins.joinToString(" ")})" else "${model.file} · ${model.type}"
+                    ModelRow(model.name, detail, model.name.equals(current, true)) { onChange(model.name) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelRow(name: String, description: String, selected: Boolean, onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(name, fontFamily = FontFamily.Monospace) },
+        supportingContent = { Text(description, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        leadingContent = { RadioButton(selected = selected, onClick = null) },
+        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+        modifier = Modifier.clickable(onClick = onClick),
+    )
 }
 
 @Composable

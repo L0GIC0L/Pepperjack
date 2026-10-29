@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,14 +31,19 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,22 +59,35 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.l0gic0l.pepperjack.AppContainer
+import io.github.l0gic0l.pepperjack.data.LibraryFile
+import io.github.l0gic0l.pepperjack.spice.ModelFamily
 import io.github.l0gic0l.pepperjack.spice.SpiceModels
 import io.github.l0gic0l.pepperjack.ui.common.clickableRow
 import io.github.l0gic0l.pepperjack.ui.common.displayName
 import io.github.l0gic0l.pepperjack.ui.common.readBytes
+import io.github.l0gic0l.pepperjack.ui.symbols.SymbolThumbnail
 import io.github.l0gic0l.pepperjack.util.Si
 import kotlinx.coroutines.launch
 
+/** Opens the symbol editor for an existing symbol, or for a new one made from [subckt] in [file]. */
+fun interface SymbolEditorLauncher {
+    fun open(symbolId: String?, file: String?, subckt: String?)
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ModelsScreen(container: AppContainer) {
+fun ModelsScreen(container: AppContainer, onEditSymbol: SymbolEditorLauncher) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val files by container.library.files.collectAsStateWithLifecycle()
+    val symbols by container.symbols.symbols.collectAsStateWithLifecycle()
     var viewing by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var openFile by remember { mutableStateOf<LibraryFile?>(null) }
 
-    LaunchedEffect(Unit) { container.library.refresh() }
+    LaunchedEffect(Unit) {
+        container.library.refresh()
+        container.symbols.load()
+    }
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         scope.launch {
@@ -105,24 +125,47 @@ fun ModelsScreen(container: AppContainer) {
                         headlineContent = { Text("Use vendor models") },
                         supportingContent = {
                             Text(
-                                "Add .lib, .mod, .sub or .inc files from TI, Analog Devices, onsemi and others, " +
-                                    "then reference them in a netlist or schematic directive with " +
-                                    ".include FILE or .lib FILE. PSpice and LTspice model syntax both work.",
+                                "Add .lib, .mod, .sub or .inc files from TI, Analog Devices, onsemi and others. " +
+                                    "Type a model's name as a part's model and it is included automatically. " +
+                                    "Open a file to make a symbol for any of its subcircuits.",
                             )
                         },
-                        colors = androidx.compose.material3.ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    )
+                }
+            }
+            if (symbols.isNotEmpty()) {
+                item { SectionHeader("Your symbols") }
+                items(symbols, key = { "symbol-" + it.id }) { symbol ->
+                    ListItem(
+                        leadingContent = { SymbolThumbnail(symbol) },
+                        headlineContent = { Text(symbol.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = {
+                            Text(
+                                listOf(symbol.subckt, symbol.library).filter { it.isNotEmpty() }.distinct().joinToString(" · ") +
+                                    " · ${symbol.pins.size} pins",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        trailingContent = {
+                            IconButton(onClick = { scope.launch { container.symbols.delete(symbol.id) } }) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Delete the ${symbol.title} symbol")
+                            }
+                        },
+                        modifier = Modifier.clickableRow { onEditSymbol.open(symbol.id, null, null) },
                     )
                 }
             }
             if (files.isNotEmpty()) {
                 item { SectionHeader("Your files") }
             }
-            items(files, key = { it.name }) { file ->
+            items(files, key = { "file-" + it.name }) { file ->
                 ListItem(
                     leadingContent = { Icon(Icons.Outlined.Description, null) },
                     headlineContent = { Text(file.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     supportingContent = {
-                        val models = if (file.modelNames.isEmpty()) "no models found" else file.modelNames.take(6).joinToString()
+                        val models = if (file.models.isEmpty()) "no models found" else file.modelNames.take(6).joinToString()
                         Text(
                             "${Si.format(file.sizeBytes.toDouble(), "B")} · $models",
                             maxLines = 2,
@@ -134,28 +177,76 @@ fun ModelsScreen(container: AppContainer) {
                             Icon(Icons.Outlined.Delete, contentDescription = "Remove ${file.name}")
                         }
                     },
-                    modifier = Modifier.clickableRow {
-                        scope.launch { viewing = file.name to container.library.read(file.name) }
-                    },
+                    modifier = Modifier.clickableRow { openFile = file },
                 )
             }
             item { SectionHeader("Built in") }
             item {
                 Text(
-                    "Generic models the schematic parts use. Type any of these names as a part's model.",
+                    "Models the schematic parts offer, with datasheet-typical parameters. ICs are behavioural " +
+                        "macro-models of the datasheet headline figures. Tap one to see its definition.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    SpiceModels.names.forEach { name ->
-                        AssistChip(onClick = {
-                            viewing = name to (SpiceModels.find(name)?.card ?: "")
-                        }, label = { Text(name) })
+            }
+            ModelFamily.entries.forEach { family ->
+                val models = SpiceModels.family(family)
+                if (models.isEmpty()) return@forEach
+                item(key = "family-" + family.name) {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text(family.title, style = MaterialTheme.typography.labelLarge)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            models.forEach { model ->
+                                AssistChip(
+                                    onClick = { viewing = model.name to "* ${model.description}\n${model.text}" },
+                                    label = { Text(model.name) },
+                                )
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+
+    openFile?.let { file ->
+        ModalBottomSheet(onDismissRequest = { openFile = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
+                Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(file.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 2)
+                    OutlinedButton(onClick = {
+                        scope.launch { viewing = file.name to container.library.read(file.name) }
+                    }) { Text("View source") }
+                }
+                if (file.models.isEmpty()) {
+                    Text(
+                        "No .model or .subckt definitions were found in this file.",
+                        modifier = Modifier.padding(24.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                file.models.forEach { model ->
+                    ListItem(
+                        headlineContent = { Text(model.name, fontFamily = FontFamily.Monospace) },
+                        supportingContent = {
+                            Text(
+                                if (model.isSubckt) "Subcircuit: ${model.pins.joinToString(" ")}" else "${model.type} model",
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        trailingContent = if (model.isSubckt) {
+                            {
+                                FilledTonalButton(onClick = {
+                                    openFile = null
+                                    onEditSymbol.open(null, file.name, model.name)
+                                }) { Text("Make symbol") }
+                            }
+                        } else {
+                            null
+                        },
+                    )
                 }
             }
         }
