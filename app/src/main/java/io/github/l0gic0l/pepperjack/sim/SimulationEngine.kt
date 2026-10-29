@@ -2,6 +2,7 @@ package io.github.l0gic0l.pepperjack.sim
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
 import io.github.l0gic0l.pepperjack.spice.Preprocessor
 import io.github.l0gic0l.pepperjack.spice.ProbeVector
@@ -130,11 +131,14 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
             if (current is EngineStatus.Unavailable) return current
             NgSpiceNative.unload()
         }
+        // Each step is logged so a crash report shows how far start-up got.
         val result = if (!NgSpiceNative.bridgeLoaded) {
             EngineStatus.Unavailable("The native bridge failed to load on this device.")
         } else {
             val library = File(nativeLibraryDir, "libngspice.so")
+            Log.i(TAG, "Loading ${library.absolutePath} (exists=${library.exists()})")
             val loadError = NgSpiceNative.load(library.absolutePath)
+            if (loadError == null) Log.i(TAG, "Initializing ngspice")
             when {
                 loadError != null -> EngineStatus.Unavailable(
                     if (!library.exists()) {
@@ -148,13 +152,15 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
                 else -> {
                     val models = CODE_MODELS.filter { name ->
                         val file = File(nativeLibraryDir, "libngspice_cm_$name.so")
+                        Log.i(TAG, "Loading code model $name (exists=${file.exists()})")
                         file.exists() && NgSpiceNative.command("codemodel ${file.absolutePath}") == 0
                     }
                     NgSpiceNative.command("set nomoremode")
-                    NgSpiceNative.drainOutput()
+                    NgSpiceNative.drainOutput().forEach { Log.i(TAG, it) }
                     NgSpiceNative.command("version")
                     val banner = NgSpiceNative.drainOutput().joinToString("\n")
                     val version = Regex("""ngspice-(\S+)""").find(banner)?.groupValues?.get(1) ?: "unknown"
+                    Log.i(TAG, "ngspice $version ready, code models: $models")
                     EngineStatus.Ready(version, models)
                 }
             }
@@ -211,6 +217,7 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
     }
 
     companion object {
+        private const val TAG = "PepperjackEngine"
         private const val PARSE_ERROR = "The netlist could not be parsed. See the log for the offending line."
 
         /** XSPICE code models bundled by scripts/build-ngspice-android.sh, in spinit order. */

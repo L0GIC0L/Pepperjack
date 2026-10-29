@@ -287,8 +287,10 @@ JNIEXPORT jboolean JNI_FN(initialize)(JNIEnv*, jobject) {
     if (g.noSpinit != nullptr) g.noSpinit();
     if (g.noSpiceinit != nullptr) g.noSpiceinit();
     g.exited = false;
+    LOGI("Calling ngSpice_Init");
     int rc = g.init(onSendChar, onSendStat, onControlledExit, onSendData, onSendInitData,
                     onBackgroundThread, nullptr);
+    LOGI("ngSpice_Init returned %d", rc);
     g.initialized = rc == 0;
     return g.initialized ? JNI_TRUE : JNI_FALSE;
 }
