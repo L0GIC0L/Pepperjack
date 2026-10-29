@@ -72,7 +72,7 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
                     if (rc != 0 || loadLog.any { it.text.contains("circuit not parsed", true) ||
                             it.text.contains("simulation interrupted due to error", true) }
                     ) {
-                        error = "The netlist could not be parsed. See the log for the offending line."
+                        error = PARSE_ERROR
                         break
                     }
                     step.commands.forEach { quietly(it) }
@@ -107,8 +107,11 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
             }
 
             if (error == null && plots.isEmpty()) {
-                error = log.lastOrNull { it.isError }?.text
-                    ?: "No results were produced. Add an analysis such as .tran, .ac, .dc or .op."
+                error = when {
+                    log.any { it.text.contains("circuit not parsed", ignoreCase = true) } -> PARSE_ERROR
+                    else -> log.lastOrNull { it.isError }?.text
+                        ?: "No results were produced. Add an analysis such as .tran, .ac, .dc or .op."
+                }
             }
             SimulationResult(
                 plots = plots.sortedWith(compareBy({ it.kind.ordinal }, { it.name })),
@@ -208,6 +211,8 @@ class SimulationEngine(context: Context, private val workingDirectory: File) {
     }
 
     companion object {
+        private const val PARSE_ERROR = "The netlist could not be parsed. See the log for the offending line."
+
         /** XSPICE code models bundled by scripts/build-ngspice-android.sh, in spinit order. */
         val CODE_MODELS = listOf("spice2poly", "analog", "digital", "xtradev", "xtraevt", "tlines")
     }

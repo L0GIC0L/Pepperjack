@@ -43,8 +43,11 @@ class Vector(
     val size: Int get() = real.size
     val isComplex: Boolean get() = imag != null
 
-    /** Device-internal nodes such as "m1#gate"; hidden from the default trace list. */
-    val isInternal: Boolean get() = '#' in name && !name.endsWith("#branch")
+    /**
+     * Device-internal nodes ("m1#gate") and anything inside a subcircuit ("xu1.n1");
+     * hidden from the trace list.
+     */
+    val isInternal: Boolean get() = '.' in name || ('#' in name && !name.endsWith("#branch"))
 
     /** What LTspice would call the trace: V(out), I(V1), I(R1). */
     val label: String
