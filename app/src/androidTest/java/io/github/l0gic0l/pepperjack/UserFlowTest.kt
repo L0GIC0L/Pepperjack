@@ -6,8 +6,10 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.printToLog
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -29,7 +31,9 @@ class UserFlowTest {
 
     @Test
     fun runningAnExampleShowsResults() {
-        rule.onNodeWithText("New circuit").performClick()
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+        // The extended FAB's label is only in the unmerged tree; a tap on it lands on the FAB.
+        rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
         rule.waitUntilAtLeastOneExists(hasText("RC low-pass filter"), timeoutMillis = 10_000)
         rule.onNodeWithText("RC low-pass filter").performScrollTo().performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Run simulation"), timeoutMillis = 10_000)
