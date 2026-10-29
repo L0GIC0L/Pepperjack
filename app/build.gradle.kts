@@ -79,6 +79,12 @@ android {
         }
     }
 
+    sourceSets {
+        // The plain JVM unit tests also run on the emulator, so differences between
+        // desktop Java and Android (such as ICU's stricter regex syntax) fail CI.
+        getByName("androidTest").kotlin.srcDir("src/test/java")
+    }
+
     packaging {
         jniLibs {
             // ngspice dlopen()s its XSPICE code models by file path, so native

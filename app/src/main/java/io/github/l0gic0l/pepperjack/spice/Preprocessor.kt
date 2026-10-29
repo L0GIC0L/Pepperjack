@@ -46,7 +46,7 @@ object Preprocessor {
 
 /** Rewrites LTspice's parasitic shorthand (Rser, Rpar, Cpar, Lser) into explicit elements. */
 object LtspiceCompat {
-    private val parasitic = Regex("""(?i)\s(rser|rpar|cpar|lser)\s*=\s*(\{[^}]*}|\S+)""")
+    private val parasitic = Regex("""(?i)\s(rser|rpar|cpar|lser)\s*=\s*(\{[^\}]*\}|\S+)""")
     private val whitespace = Regex("""\s+""")
 
     fun translate(netlist: String): String {
@@ -206,7 +206,7 @@ object StepSweep {
     }
 
     private fun withParam(lines: List<String>, name: String, value: String): String {
-        val assignment = Regex("""(?i)(^|\s)${Regex.escape(name)}\s*=\s*(\{[^}]*}|\S+)""")
+        val assignment = Regex("""(?i)(^|\s)${Regex.escape(name)}\s*=\s*(\{[^\}]*\}|\S+)""")
         val cleaned = lines.mapNotNull { line ->
             if (!line.trimStart().startsWith(".param", ignoreCase = true)) return@mapNotNull line
             val rest = assignment.replace(line, " ").trim()

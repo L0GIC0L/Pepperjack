@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -30,7 +31,7 @@ class UserFlowTest {
     fun runningAnExampleShowsResults() {
         rule.onNodeWithText("New circuit").performClick()
         rule.waitUntilAtLeastOneExists(hasText("RC low-pass filter"), timeoutMillis = 10_000)
-        rule.onNodeWithText("RC low-pass filter").performClick()
+        rule.onNodeWithText("RC low-pass filter").performScrollTo().performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Run simulation"), timeoutMillis = 10_000)
         rule.onNodeWithContentDescription("Run simulation").performClick()
         rule.waitUntilAtLeastOneExists(hasText("AC Analysis"), timeoutMillis = 60_000)
