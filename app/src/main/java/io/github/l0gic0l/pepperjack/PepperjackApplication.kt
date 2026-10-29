@@ -3,6 +3,7 @@ package io.github.l0gic0l.pepperjack
 import android.app.Application
 import android.content.Context
 import io.github.l0gic0l.pepperjack.data.CircuitRepository
+import io.github.l0gic0l.pepperjack.data.CrashReporter
 import io.github.l0gic0l.pepperjack.data.ModelLibrary
 import io.github.l0gic0l.pepperjack.data.SettingsRepository
 import io.github.l0gic0l.pepperjack.sim.SimulationEngine
@@ -17,6 +18,7 @@ class PepperjackApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashReporter.install(this)
         container = AppContainer(this)
     }
 }

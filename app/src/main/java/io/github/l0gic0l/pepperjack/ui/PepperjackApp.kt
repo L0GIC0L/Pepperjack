@@ -5,6 +5,9 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -12,11 +15,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import io.github.l0gic0l.pepperjack.AppContainer
+import io.github.l0gic0l.pepperjack.data.CrashReporter
 import io.github.l0gic0l.pepperjack.data.Settings
+import io.github.l0gic0l.pepperjack.ui.common.CrashReportDialog
 import io.github.l0gic0l.pepperjack.ui.common.importNetlist
 import io.github.l0gic0l.pepperjack.ui.editor.EditorScreen
 import io.github.l0gic0l.pepperjack.ui.home.HomeScreen
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -38,6 +45,12 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
             .onSuccess { navController.navigate(EditorRoute(it)) }
             .onFailure { Toast.makeText(context, it.message ?: "Import failed", Toast.LENGTH_LONG).show() }
     }
+
+    var crashReport by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        crashReport = withContext(Dispatchers.IO) { CrashReporter.pendingReport(context) }
+    }
+    crashReport?.let { report -> CrashReportDialog(report) { crashReport = null } }
 
     NavHost(navController = navController, startDestination = HomeRoute) {
         composable<HomeRoute> {
