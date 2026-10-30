@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
@@ -76,7 +78,7 @@ fun interface SymbolEditorLauncher {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-fun ModelsScreen(container: AppContainer, onEditSymbol: SymbolEditorLauncher) {
+fun ModelsScreen(container: AppContainer, onEditSymbol: SymbolEditorLauncher, onBrowseOnline: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val files by container.library.files.collectAsStateWithLifecycle()
@@ -125,13 +127,17 @@ fun ModelsScreen(container: AppContainer, onEditSymbol: SymbolEditorLauncher) {
                         headlineContent = { Text("Use vendor models") },
                         supportingContent = {
                             Text(
-                                "Add .lib, .mod, .sub or .inc files from TI, Analog Devices, onsemi and others. " +
-                                    "Type a model's name as a part's model and it is included automatically. " +
-                                    "Open a file to make a symbol for any of its subcircuits.",
+                                "Browse tens of thousands of manufacturer models online, or add .lib, .mod, .sub or .inc " +
+                                    "files of your own. Type a model's name as a part's model and it is included " +
+                                    "automatically. Open a file to make a symbol for any of its subcircuits.",
                             )
                         },
                         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                     )
+                    FilledTonalButton(onClick = onBrowseOnline, modifier = Modifier.padding(start = 56.dp, bottom = 16.dp)) {
+                        Icon(Icons.Outlined.TravelExplore, null, Modifier.size(18.dp))
+                        Text("Browse online models", Modifier.padding(start = 8.dp))
+                    }
                 }
             }
             if (symbols.isNotEmpty()) {

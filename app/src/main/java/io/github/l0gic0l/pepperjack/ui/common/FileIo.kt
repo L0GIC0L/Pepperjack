@@ -41,6 +41,11 @@ private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
     return out.toByteArray()
 }
 
+private val modelExtensions = setOf("lib", "mod", "sub", "inc", "fam", "mdl")
+
+/** Whether a file opened from another app is a model library rather than a netlist. */
+fun isModelFile(name: String) = name.substringAfterLast('.', "").lowercase() in modelExtensions
+
 /** Imports a SPICE netlist file as a new circuit and returns its id. */
 suspend fun importNetlist(context: Context, container: AppContainer, uri: Uri): Result<String> = runCatching {
     val name = displayName(context, uri)

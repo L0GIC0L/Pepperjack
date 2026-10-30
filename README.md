@@ -96,9 +96,20 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 **Netlists and models**
 - Syntax-highlighted netlist editor; import `.cir`, `.net`, `.sp` and LTspice
   netlist exports (View → SPICE Netlist), or open them from a file manager.
-- Model library: add vendor `.lib`, `.mod`, `.sub` files, then type a model's
-  name as a part's model. The file is included automatically, and the model
-  picker lists the library models that fit each symbol.
+- Model library: add vendor `.lib`, `.mod`, `.sub` files (or open them from a
+  file manager), then type a model's name as a part's model. The file is
+  included automatically, and the model picker lists the library models that
+  fit each symbol. Files are tidied as they are added so ngspice can include
+  them: DOS end-of-file bytes are dropped, and stray text, test circuits and
+  analyses outside subcircuits become comments, so no text is lost.
+- Online models: search about 66,000 manufacturer models by part number, maker
+  or type, and add one with a tap. They come from the community
+  [KiCad-Spice-Library](https://github.com/kicad-spice-library/KiCad-Spice-Library),
+  which collects files from Texas Instruments, Analog Devices, National, Maxim
+  and many other makers. The app ships only an index of names (250 kB); a file
+  is downloaded from GitHub when you add it, with its maker's notice, and stays
+  under its maker's terms. From a part's model picker, "Find more models
+  online" lists only the models that fit that symbol.
 - Symbol editor: make a symbol for any library subcircuit, the way LTspice
   generates block symbols. It starts from an automatic arrangement (supplies
   on top and bottom, inputs left, outputs right). You can then choose a block
@@ -177,6 +188,7 @@ these repository secrets:
 | `app/src/main/cpp` | JNI bridge that `dlopen`s `libngspice.so` |
 | `app/src/main/java/.../ui` | Compose screens, schematic canvas, charts, adaptive layout |
 | `scripts/build-ngspice-android.sh` | Cross-compiles ngspice and its code models with the NDK |
+| `scripts/build-model-index.py` | Rebuilds the online model index from a clone of KiCad-Spice-Library |
 
 ## Not supported yet
 
@@ -189,6 +201,11 @@ these repository secrets:
 ## License
 
 Pepperjack is MIT licensed (see [LICENSE](LICENSE)).
+
+The online model index lists the names of the models in
+[KiCad-Spice-Library](https://github.com/kicad-spice-library/KiCad-Spice-Library);
+no model files are bundled. Each file is downloaded from that repository only
+when you add it, and stays under its maker's terms.
 
 The bundled simulator is [ngspice 47](https://sourceforge.net/projects/ngspice/files/ng-spice-rework/47/),
 © the ngspice team, under the Modified BSD license, except: KLU and numparam

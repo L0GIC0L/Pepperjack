@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -172,8 +173,11 @@ private fun PartTile(title: String, preview: Part, onClick: () -> Unit) {
 private val suffixes = listOf("p", "n", "u", "m", "k", "Meg")
 
 /** Whether a model from the user's library fits [this] symbol. */
-fun PartDef.accepts(model: LibraryModel): Boolean {
-    if (model.isSubckt) return model.pins.size == pins.size && editor == ValueEditor.MODEL
+fun PartDef.accepts(model: LibraryModel): Boolean = accepts(model.type, model.pins.size)
+
+/** Whether a model of [type] (a `.model` type, or SUBCKT with [pins] ports) fits [this] symbol. */
+fun PartDef.accepts(type: String, pins: Int): Boolean {
+    if (type == LibraryModel.SUBCKT) return pins == this.pins.size && editor == ValueEditor.MODEL
     val types = families.flatMap { family ->
         when (family) {
             ModelFamily.DIODE, ModelFamily.SCHOTTKY, ModelFamily.ZENER, ModelFamily.LED -> listOf("D")
@@ -187,7 +191,7 @@ fun PartDef.accepts(model: LibraryModel): Boolean {
             else -> emptyList()
         }
     }
-    return model.type in types
+    return type in types
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -196,6 +200,7 @@ fun PartEditorSheet(
     part: Part,
     libraryModels: List<LibraryModel>,
     onDismiss: () -> Unit,
+    onBrowseOnline: () -> Unit,
     onSave: (ref: String, value: String) -> Unit,
 ) {
     val def = part.def
@@ -230,7 +235,7 @@ fun PartEditorSheet(
                     },
                 )
                 ValueEditor.SOURCE -> SourceEditor(source, unit) { source = it }
-                ValueEditor.MODEL -> ModelPicker(def, value, libraryModels) { value = it }
+                ValueEditor.MODEL -> ModelPicker(def, value, libraryModels, onBrowseOnline) { value = it }
                 ValueEditor.POT -> {
                     val pot = PotValue.parse(value)
                     OutlinedTextField(
@@ -334,7 +339,13 @@ private fun Choice(options: List<Pair<String, String>>, selected: String, onSele
 
 /** Model name field plus a browsable list of built-in and library models that fit the symbol. */
 @Composable
-private fun ModelPicker(def: PartDef, value: String, libraryModels: List<LibraryModel>, onChange: (String) -> Unit) {
+private fun ModelPicker(
+    def: PartDef,
+    value: String,
+    libraryModels: List<LibraryModel>,
+    onBrowseOnline: () -> Unit,
+    onChange: (String) -> Unit,
+) {
     val current = value.trim().substringBefore(' ')
     OutlinedTextField(
         value = value,
@@ -345,7 +356,9 @@ private fun ModelPicker(def: PartDef, value: String, libraryModels: List<Library
         textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
         modifier = Modifier.fillMaxWidth(),
     )
-    val fromLibrary = libraryModels.filter { def.accepts(it) }
+    val fitting = libraryModels.filter { def.accepts(it) }
+    // A downloaded vendor file can hold hundreds of models; list a page of those matching the field.
+    val fromLibrary = if (fitting.size <= LIBRARY_PAGE) fitting else fitting.filter { it.name.contains(current, true) }.take(LIBRARY_PAGE)
     def.families.forEach { family ->
         val models = SpiceModels.family(family)
         if (models.isEmpty()) return@forEach
@@ -358,18 +371,33 @@ private fun ModelPicker(def: PartDef, value: String, libraryModels: List<Library
             }
         }
     }
-    if (fromLibrary.isNotEmpty()) {
+    if (fitting.isNotEmpty()) {
         Text("From your model library", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
-            Column {
-                fromLibrary.forEach { model ->
-                    val detail = if (model.isSubckt) "${model.file} · subcircuit (${model.pins.joinToString(" ")})" else "${model.file} · ${model.type}"
-                    ModelRow(model.name, detail, model.name.equals(current, true)) { onChange(model.name) }
+        if (fromLibrary.size < fitting.size) {
+            Text(
+                "${fitting.size} fit this part. Type part of a name above to find one.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (fromLibrary.isNotEmpty()) {
+            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
+                Column {
+                    fromLibrary.forEach { model ->
+                        val detail = if (model.isSubckt) "${model.file} · subcircuit (${model.pins.joinToString(" ")})" else "${model.file} · ${model.type}"
+                        ModelRow(model.name, detail, model.name.equals(current, true)) { onChange(model.name) }
+                    }
                 }
             }
         }
     }
+    OutlinedButton(onClick = onBrowseOnline, modifier = Modifier.fillMaxWidth()) {
+        Icon(Icons.Outlined.TravelExplore, null, Modifier.size(18.dp))
+        Text("Find more models online", Modifier.padding(start = 8.dp))
+    }
 }
+
+private const val LIBRARY_PAGE = 30
 
 @Composable
 private fun ModelRow(name: String, description: String, selected: Boolean, onClick: () -> Unit) {

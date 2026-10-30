@@ -1,5 +1,6 @@
 package io.github.l0gic0l.pepperjack.data
 
+import io.github.l0gic0l.pepperjack.spice.LtspiceCompat
 import io.github.l0gic0l.pepperjack.spice.SubcktHeader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +26,8 @@ data class LibraryModel(
     }
 }
 
-data class LibraryFile(val name: String, val sizeBytes: Long, val models: List<LibraryModel>) {
+/** [source] is the web page a downloaded file came from. */
+data class LibraryFile(val name: String, val sizeBytes: Long, val models: List<LibraryModel>, val source: String? = null) {
     val modelNames: List<String> get() = models.map { it.name }
 }
 
@@ -48,35 +50,95 @@ class ModelLibrary(val directory: File) {
         _files.value = directory.listFiles { file -> file.isFile }.orEmpty()
             .sortedBy { it.name.lowercase(Locale.ROOT) }
             .map { file ->
-                val models = runCatching { parse(file.name, file.readText()) }.getOrDefault(emptyList())
-                LibraryFile(file.name, file.length(), models)
+                val text = runCatching { file.readText() }.getOrDefault("")
+                val source = text.lineSequence().firstOrNull()?.takeIf { it.startsWith(SOURCE) }?.removePrefix(SOURCE)?.trim()
+                LibraryFile(file.name, file.length(), runCatching { parse(file.name, text) }.getOrDefault(emptyList()), source)
             }
     }
 
-    suspend fun add(name: String, bytes: ByteArray) = withContext(Dispatchers.IO) {
+    /** Saves a model file as [name], [clean]ed so that ngspice can include it; [source] is noted on its first line. */
+    suspend fun add(name: String, bytes: ByteArray, source: String? = null) = withContext(Dispatchers.IO) {
         directory.mkdirs()
-        File(directory, sanitize(name)).writeBytes(bytes)
+        val header = source?.let { "$SOURCE $it\n" }.orEmpty()
+        File(directory, fileName(name)).writeText(header + clean(decode(bytes)))
         refresh()
     }
 
-    suspend fun read(name: String): String = withContext(Dispatchers.IO) { File(directory, sanitize(name)).readText() }
+    suspend fun read(name: String): String = withContext(Dispatchers.IO) { File(directory, fileName(name)).readText() }
 
     suspend fun delete(name: String) = withContext(Dispatchers.IO) {
-        File(directory, sanitize(name)).delete()
+        File(directory, fileName(name)).delete()
         refresh()
     }
 
-    private fun sanitize(name: String) = name.substringAfterLast('/').replace(Regex("""[^\w.\-+]"""), "_").ifEmpty { "model.lib" }
-
     companion object {
-        private val modelCard = Regex("""(?im)^[ \t]*\.model[ \t]+(\S+)[ \t]+([A-Za-z_]+)""")
+        private const val SOURCE = "* Source:"
+        private val modelCard = Regex("""(?i)^\s*\.model\s+(\S+)\s+([A-Za-z_]+)""")
+        private val directive = Regex("""^\s*\.(\w+)""")
 
-        fun parse(file: String, text: String): List<LibraryModel> {
-            val models = modelCard.findAll(text).map {
-                LibraryModel(it.groupValues[1], file, it.groupValues[2].uppercase(Locale.ROOT))
+        /** Directives a library may hold outside a subcircuit; any other line there would change the circuit. */
+        private val libraryDirectives = setOf("model", "subckt", "ends", "param", "func", "global", "include", "inc")
+
+        /** The name a file is stored under in the library folder. */
+        fun fileName(name: String) = name.substringAfterLast('/').replace(Regex("""[^\w.\-+]"""), "_").ifEmpty { "model.lib" }
+
+        /** UTF-8 if the bytes are valid UTF-8, else Latin-1, the usual encoding of older vendor files. */
+        fun decode(bytes: ByteArray): String = runCatching {
+            Charsets.UTF_8.newDecoder().decode(java.nio.ByteBuffer.wrap(bytes)).toString()
+        }.getOrElse { String(bytes, Charsets.ISO_8859_1) }
+
+        /**
+         * Makes a vendor file safe to `.include`. Many files carry DOS end-of-file bytes, a
+         * byte-order mark, pin diagrams that lost their comment marks, or a test circuit with
+         * its analyses and `.end`, and ngspice stops at any of them. Those control characters
+         * are dropped and every other line outside a subcircuit that is not a model definition
+         * is commented out, so the text, including the maker's license notice, is all kept.
+         */
+        fun clean(text: String): String {
+            var depth = 0
+            var continuesComment = false
+            return text.replace(Regex("[\u0000\u001a\ufeff]"), "").lineSequence().joinToString("\n") { line ->
+                val trimmed = line.trim()
+                when {
+                    trimmed.isEmpty() || trimmed[0] == '*' -> line
+                    trimmed[0] == '+' -> if (depth == 0 && continuesComment) "* $line" else line
+                    depth > 0 -> {
+                        when (directive.find(trimmed)?.groupValues?.get(1)?.lowercase(Locale.ROOT)) {
+                            "subckt" -> depth++
+                            "ends" -> depth--
+                        }
+                        line
+                    }
+                    else -> {
+                        val keyword = directive.find(trimmed)?.groupValues?.get(1)?.lowercase(Locale.ROOT)
+                        continuesComment = keyword == "ends" || keyword !in libraryDirectives
+                        if (keyword == "subckt") depth = 1
+                        if (continuesComment) "* $line" else line
+                    }
+                }
             }
-            val subckts = SubcktHeader.parseAll(text).map { LibraryModel(it.name, file, LibraryModel.SUBCKT, it.pins) }
-            return (subckts + models).distinctBy { it.name.uppercase(Locale.ROOT) }.toList()
+        }
+
+        /** The `.model` cards and `.subckt`s a file defines; models local to a subcircuit are left out. */
+        fun parse(file: String, text: String): List<LibraryModel> {
+            val models = mutableListOf<LibraryModel>()
+            val subckts = mutableListOf<LibraryModel>()
+            var depth = 0
+            for (line in LtspiceCompat.joinContinuations(text.lines())) {
+                when (directive.find(line)?.groupValues?.get(1)?.lowercase(Locale.ROOT)) {
+                    "subckt" -> if (depth++ == 0) {
+                        SubcktHeader.parse(line)?.let { subckts += LibraryModel(it.name, file, LibraryModel.SUBCKT, it.pins) }
+                    }
+                    "ends" -> depth = maxOf(0, depth - 1)
+                    "model" -> if (depth == 0) {
+                        val card = modelCard.find(line) ?: continue
+                        val type = card.groupValues[2].uppercase(Locale.ROOT)
+                        // PSpice "AKO" (a kind of) cards copy another model; ngspice has no equivalent.
+                        if (type != "AKO") models += LibraryModel(card.groupValues[1], file, type)
+                    }
+                }
+            }
+            return (subckts + models).distinctBy { it.name.uppercase(Locale.ROOT) }
         }
     }
 }

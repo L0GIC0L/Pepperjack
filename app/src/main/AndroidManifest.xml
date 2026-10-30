@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Downloads model files from the online model library when the user adds one. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:name=".PepperjackApplication"
         android:allowBackup="true"
@@ -23,7 +26,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Open SPICE netlists from file managers and other apps. -->
+            <!-- Open SPICE netlists, and model files (.lib, .mod, ...) for the model library, from other apps. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -86,7 +86,13 @@ private enum class Pane(val label: String) { SCHEMATIC("Schematic"), NETLIST("Ne
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditorScreen(container: AppContainer, settings: Settings, circuitId: String, onBack: () -> Unit) {
+fun EditorScreen(
+    container: AppContainer,
+    settings: Settings,
+    circuitId: String,
+    onBack: () -> Unit,
+    onBrowseModels: (partKind: String) -> Unit,
+) {
     val viewModel: EditorViewModel = viewModel(key = circuitId) { EditorViewModel(container, circuitId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val progress by viewModel.progress.collectAsStateWithLifecycle()
@@ -314,7 +320,12 @@ fun EditorScreen(container: AppContainer, settings: Settings, circuitId: String,
 
     state.editingPartId?.let { id ->
         circuit.schematic.parts.firstOrNull { it.id == id }?.let { part ->
-            PartEditorSheet(part, libraryFiles.flatMap { it.models }, onDismiss = { viewModel.openEditor(null) }) { ref, value ->
+            PartEditorSheet(
+                part,
+                libraryFiles.flatMap { it.models },
+                onDismiss = { viewModel.openEditor(null) },
+                onBrowseOnline = { onBrowseModels(part.kind.name) },
+            ) { ref, value ->
                 viewModel.updatePart(part.id, ref, value)
                 viewModel.openEditor(null)
             }

@@ -118,14 +118,19 @@ object LtspiceCompat {
         return out.joinToString("\n", postfix = "\n")
     }
 
-    /** Folds SPICE "+" continuation lines into the line they continue. */
+    /**
+     * Folds SPICE "+" continuation lines into the line they continue. As in ngspice, that is
+     * the last line that is not a comment or blank, so comments between continuations stay.
+     */
     fun joinContinuations(lines: List<String>): List<String> {
         val result = ArrayList<String>(lines.size)
+        var target = -1
         for (line in lines) {
             val trimmed = line.trimStart()
-            if (trimmed.startsWith("+") && result.isNotEmpty()) {
-                result[result.lastIndex] = result.last().trimEnd() + " " + trimmed.substring(1).trim()
+            if (trimmed.startsWith("+") && target >= 0) {
+                result[target] = result[target].trimEnd() + " " + trimmed.substring(1).trim()
             } else {
+                if (trimmed.isNotEmpty() && !trimmed.startsWith("*")) target = result.size
                 result += line
             }
         }

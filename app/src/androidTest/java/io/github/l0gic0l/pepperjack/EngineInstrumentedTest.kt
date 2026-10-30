@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.l0gic0l.pepperjack.data.Examples
 import io.github.l0gic0l.pepperjack.model.CircuitKind
+import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
 import io.github.l0gic0l.pepperjack.sim.EngineStatus
 import io.github.l0gic0l.pepperjack.sim.LiveView
@@ -79,6 +80,38 @@ class EngineInstrumentedTest {
             }
         }
         Log.i(TAG, "Simulated ${ModelZoo.benches().size} model benches, plain and live")
+    }
+
+    /** The online library end to end: download TI's LM358 model from GitHub, then simulate it in a schematic. */
+    @Test
+    fun anOnlineModelDownloadsAndSimulates(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        val index = container.onlineModels.index()
+        val model = index.models.first { it.name == "LM358" && it.file.path.endsWith("Texas Instruments/lm358.mod") }
+        val name = container.onlineModels.add(index, model.file)
+        val stored = container.library.files.value.first { it.name == name }
+        assertTrue(stored.source, index.isCopy(stored.source, model.file))
+        assertTrue(stored.models.any { it.name == "LM358" && it.pins.size == 5 })
+
+        // A non-inverting amplifier with a gain of 2 on ±12 V supplies.
+        val circuit = ModelZoo.Bench("online-lm358").run {
+            part(PartKind.VOLTAGE, "V1", "vp", "0", value = "DC 12")
+            part(PartKind.VOLTAGE, "V2", "0", "vn", value = "DC 12")
+            part(PartKind.VOLTAGE, "V3", "in", "0", value = "SIN(0 2 1k)")
+            part(PartKind.RESISTOR, "R1", "out", "fb", value = "10k")
+            part(PartKind.RESISTOR, "R2", "fb", "0", value = "10k")
+            part(PartKind.OPAMP5, "U1", "in", "fb", "vp", "vn", "out", value = "LM358")
+            circuit(ModelZoo.tran)
+        }
+        val netlist = Netlister.netlist(circuit, container.library.index())
+        assertTrue(netlist.text, netlist.text.contains(".include $name"))
+        val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+        result.log.filter { it.isError }.forEach { Log.w(TAG, "  online LM358: ${it.text}") }
+        assertTrue(result.error, result.succeeded)
+        val out = result.plots.flatMap { it.vectors }.first { it.name.equals("v(out)", true) || it.name.equals("out", true) }
+        val peak = out.real.maxOf { it }
+        Log.i(TAG, "Online LM358: peak output $peak V")
+        assertTrue("peak $peak", peak in 3.6..4.4)
     }
 
     private companion object {

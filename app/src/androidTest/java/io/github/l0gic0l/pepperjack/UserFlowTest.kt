@@ -2,6 +2,7 @@ package io.github.l0gic0l.pepperjack
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -11,14 +12,16 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToLog
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.l0gic0l.pepperjack.ui.home.NEW_CIRCUIT_LIST
+import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** The two user flows that crashed on a Pixel Fold: opening Settings, and running a simulation. */
+/** The main user flows, starting with the two that crashed on a Pixel Fold: opening Settings, and running a simulation. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class UserFlowTest {
@@ -58,6 +61,15 @@ class UserFlowTest {
         waitWithFrames { rule.onAllNodes(hasContentDescription("Stop live simulation")).fetchSemanticsNodes().isNotEmpty() }
         waitWithFrames { rule.onAllNodes(hasText("Operating point")).fetchSemanticsNodes().isNotEmpty() }
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+    }
+
+    @Test
+    fun browsingOnlineModelsFindsAPart() {
+        rule.onNodeWithText("Models").performClick()
+        rule.onNodeWithText("Browse online models").performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag(ONLINE_SEARCH), timeoutMillis = 10_000)
+        rule.onNodeWithTag(ONLINE_SEARCH).performTextInput("LM358")
+        rule.waitUntilAtLeastOneExists(hasText("Texas Instruments/lm358.mod", substring = true), timeoutMillis = 30_000)
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {

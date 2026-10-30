@@ -29,6 +29,7 @@ fun HomeScreen(
     settings: Settings,
     onOpenCircuit: (String) -> Unit,
     onEditSymbol: SymbolEditorLauncher,
+    onBrowseOnline: () -> Unit,
 ) {
     var tab by rememberSaveable { mutableStateOf(HomeTab.CIRCUITS) }
     NavigationSuiteScaffold(
@@ -45,7 +46,7 @@ fun HomeScreen(
     ) {
         when (tab) {
             HomeTab.CIRCUITS -> CircuitsScreen(container, onOpenCircuit)
-            HomeTab.MODELS -> ModelsScreen(container, onEditSymbol)
+            HomeTab.MODELS -> ModelsScreen(container, onEditSymbol, onBrowseOnline)
             HomeTab.SETTINGS -> SettingsScreen(container, settings)
         }
     }

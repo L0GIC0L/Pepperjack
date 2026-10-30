@@ -39,6 +39,13 @@ class PreprocessorTest {
     }
 
     @Test
+    fun continuationsSkipCommentsAsInNgspice() {
+        val out = LtspiceCompat.translate("* t\n.model D1 D(Is=1n\n* note\n\n+ N=2)\n").lines()
+        assertTrue(out.toString(), ".model D1 D(Is=1n N=2)" in out)
+        assertTrue("* note" in out)
+    }
+
+    @Test
     fun expandsParamStepLists() {
         val deck = Preprocessor.prepare(
             "* t\n.param C=100n\nC1 out 0 {C}\n.step param C list 10n 1u\n.ac dec 10 1 1k\n.end\n",

@@ -21,9 +21,13 @@ import io.github.l0gic0l.pepperjack.AppContainer
 import io.github.l0gic0l.pepperjack.data.CrashReporter
 import io.github.l0gic0l.pepperjack.data.Settings
 import io.github.l0gic0l.pepperjack.ui.common.CrashReportDialog
+import io.github.l0gic0l.pepperjack.ui.common.displayName
 import io.github.l0gic0l.pepperjack.ui.common.importNetlist
+import io.github.l0gic0l.pepperjack.ui.common.isModelFile
+import io.github.l0gic0l.pepperjack.ui.common.readBytes
 import io.github.l0gic0l.pepperjack.ui.editor.EditorScreen
 import io.github.l0gic0l.pepperjack.ui.home.HomeScreen
+import io.github.l0gic0l.pepperjack.ui.home.OnlineModelsScreen
 import io.github.l0gic0l.pepperjack.ui.symbols.SymbolEditorScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,6 +40,10 @@ data object HomeRoute
 
 @Serializable
 data class EditorRoute(val circuitId: String)
+
+/** The online model library; from a part's model picker, [partKind] filters for models that fit it. */
+@Serializable
+data class OnlineModelsRoute(val partKind: String? = null)
 
 /** Edits [symbolId], or makes a new symbol for [subckt] from library [file]. */
 @Serializable
@@ -61,6 +69,13 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
     LaunchedEffect(incoming) {
         val uri = incoming ?: return@LaunchedEffect
         pendingImport.value = null
+        val name = runCatching { displayName(context, uri) }.getOrDefault("")
+        if (isModelFile(name)) {
+            runCatching { container.library.add(name, readBytes(context, uri)) }
+                .onSuccess { Toast.makeText(context, "Added $name to your model library", Toast.LENGTH_SHORT).show() }
+                .onFailure { Toast.makeText(context, it.message ?: "Import failed", Toast.LENGTH_LONG).show() }
+            return@LaunchedEffect
+        }
         importNetlist(context, container, uri)
             .onSuccess { open(EditorRoute(it)) }
             .onFailure { Toast.makeText(context, it.message ?: "Import failed", Toast.LENGTH_LONG).show() }
@@ -78,6 +93,15 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
                 container = container,
                 settings = settings,
                 onOpenCircuit = { open(EditorRoute(it)) },
+                onEditSymbol = { id, file, subckt -> open(SymbolEditorRoute(id, file, subckt)) },
+                onBrowseOnline = { navController.navigate(OnlineModelsRoute()) },
+            )
+        }
+        composable<OnlineModelsRoute> { entry ->
+            OnlineModelsScreen(
+                container = container,
+                partKind = entry.toRoute<OnlineModelsRoute>().partKind,
+                onBack = { navController.popBackStack() },
                 onEditSymbol = { id, file, subckt -> open(SymbolEditorRoute(id, file, subckt)) },
             )
         }
@@ -97,6 +121,7 @@ fun PepperjackApp(container: AppContainer, settings: Settings, pendingImport: Mu
                 settings = settings,
                 circuitId = entry.toRoute<EditorRoute>().circuitId,
                 onBack = { navController.popBackStack() },
+                onBrowseModels = { navController.navigate(OnlineModelsRoute(it)) },
             )
         }
     }
