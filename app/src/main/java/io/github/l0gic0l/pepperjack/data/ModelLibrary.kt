@@ -73,6 +73,7 @@ class ModelLibrary(val directory: File) {
 
     companion object {
         private const val SOURCE = "* Source:"
+        private const val CLOSE = "* (Pepperjack: the file leaves this subcircuit open)\n.ends"
         private val modelCard = Regex("""(?i)^\s*\.model\s+(\S+)\s+([A-Za-z_]+)""")
         private val directive = Regex("""^\s*\.(\w+)""")
 
@@ -93,30 +94,46 @@ class ModelLibrary(val directory: File) {
          * its analyses and `.end`, and ngspice stops at any of them. Those control characters
          * are dropped and every other line outside a subcircuit that is not a model definition
          * is commented out, so the text, including the maker's license notice, is all kept.
+         *
+         * PSpice and LTspice also forgive a subcircuit left without its `.ends`, and neither
+         * nests subcircuits; ngspice reads the rest of the file as nested in the open one. So
+         * when a file has fewer `.ends` than `.subckt` lines, each subcircuit is closed where
+         * the next one starts, and at the end of the file.
          */
         fun clean(text: String): String {
+            val lines = text.replace(Regex("[\u0000\u001a\ufeff]"), "").lines()
+            val keywords = lines.map { directive.find(it)?.groupValues?.get(1)?.lowercase(Locale.ROOT) }
+            val unclosed = keywords.count { it == "subckt" } > keywords.count { it == "ends" }
+            val out = ArrayList<String>(lines.size + 2)
             var depth = 0
             var continuesComment = false
-            return text.replace(Regex("[\u0000\u001a\ufeff]"), "").lineSequence().joinToString("\n") { line ->
+            lines.forEachIndexed { i, line ->
                 val trimmed = line.trim()
+                val keyword = keywords[i]
                 when {
-                    trimmed.isEmpty() || trimmed[0] == '*' -> line
-                    trimmed[0] == '+' -> if (depth == 0 && continuesComment) "* $line" else line
-                    depth > 0 -> {
-                        when (directive.find(trimmed)?.groupValues?.get(1)?.lowercase(Locale.ROOT)) {
-                            "subckt" -> depth++
-                            "ends" -> depth--
+                    trimmed.isEmpty() || trimmed[0] == '*' -> out += line
+                    trimmed[0] == '+' -> out += if (depth == 0 && continuesComment) "* $line" else line
+                    depth > 0 -> when (keyword) {
+                        "subckt" -> {
+                            if (unclosed) out += CLOSE else depth++
+                            out += line
                         }
-                        line
+                        "ends" -> {
+                            depth--
+                            out += line
+                        }
+                        "end" -> out += "* $line"
+                        else -> out += line
                     }
                     else -> {
-                        val keyword = directive.find(trimmed)?.groupValues?.get(1)?.lowercase(Locale.ROOT)
                         continuesComment = keyword == "ends" || keyword !in libraryDirectives
                         if (keyword == "subckt") depth = 1
-                        if (continuesComment) "* $line" else line
+                        out += if (continuesComment) "* $line" else line
                     }
                 }
             }
+            repeat(depth) { out += CLOSE }
+            return out.joinToString("\n")
         }
 
         /** The `.model` cards and `.subckt`s a file defines; models local to a subcircuit are left out. */

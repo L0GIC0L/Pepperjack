@@ -53,6 +53,21 @@ class ModelLibraryTest {
     }
 
     @Test
+    fun cleanClosesSubcircuitsTheFileLeavesOpen() {
+        val text = ".subckt A 1 2\nR1 1 2 1k\n.subckt B 1 2\nR1 1 2 2k\n.ends B\n.subckt C 1 2\nR1 1 2 3k\n.end\n"
+        val live = ModelLibrary.clean(text).lines().filter { it.isNotBlank() && !it.startsWith("*") }
+        assertEquals(
+            listOf(".subckt A 1 2", "R1 1 2 1k", ".ends", ".subckt B 1 2", "R1 1 2 2k", ".ends B", ".subckt C 1 2", "R1 1 2 3k", ".ends"),
+            live,
+        )
+        assertEquals(listOf("A", "B", "C"), ModelLibrary.parse("x.lib", ModelLibrary.clean(text)).map { it.name })
+        // Balanced files may nest subcircuits, as ngspice allows.
+        val nested = ".subckt OUTER 1 2\n.subckt INNER 1 2\nR1 1 2 1k\n.ends INNER\nX1 1 2 INNER\n.ends OUTER\n"
+        assertEquals(nested.trimEnd(), ModelLibrary.clean(nested).trimEnd())
+        assertEquals(listOf("OUTER"), ModelLibrary.parse("x.lib", nested).map { it.name })
+    }
+
+    @Test
     fun decodeFallsBackToLatin1() {
         val latin1 = "* © 1998 µA".toByteArray(Charsets.ISO_8859_1)
         assertEquals("* © 1998 µA", ModelLibrary.decode(latin1))

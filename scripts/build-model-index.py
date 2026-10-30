@@ -54,9 +54,13 @@ def logical_lines(text):
 
 
 def definitions(text):
-    """Top-level definitions only: models inside a .subckt are local to it."""
+    """Top-level definitions only: models inside a .subckt are local to it. As
+    ModelLibrary.clean, a file with fewer .ends than .subckt lines is read flat,
+    each subcircuit ending where the next begins."""
+    lines = list(logical_lines(text))
+    unclosed = sum(1 for l in lines if SUBCKT.match(l)) > sum(1 for l in lines if ENDS.match(l))
     depth = 0
-    for line in logical_lines(text):
+    for line in lines:
         if ENDS.match(line):
             depth = max(0, depth - 1)
             continue
@@ -67,7 +71,8 @@ def definitions(text):
             continue
         s = SUBCKT.match(line)
         if s:
-            depth += 1
+            if depth == 0 or not unclosed:
+                depth += 1
             if depth > 1:
                 continue
             pins = []
