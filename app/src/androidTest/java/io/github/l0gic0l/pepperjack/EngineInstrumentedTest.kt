@@ -60,7 +60,9 @@ class EngineInstrumentedTest {
             assertTrue("${example.title}: ${result.error}", result.succeeded)
             val view = LiveView.build(circuit.schematic, netlist, result)
             Log.i(TAG, "${example.title} live: ${view?.segments?.size} segments, ${view?.samples} samples, max ${view?.maxCurrent} A")
-            assertTrue(example.title, view != null && view.segments.isNotEmpty() && view.maxCurrent > 0)
+            assertTrue(example.title, view != null && view.segments.isNotEmpty())
+            // Live views show the DC operating point (or a transient); AC-only examples carry no DC current.
+            if (example.title in drivenExamples) assertTrue("${example.title} has current", view!!.maxCurrent > 1e-4)
         }
     }
 
@@ -81,5 +83,6 @@ class EngineInstrumentedTest {
 
     private companion object {
         const val TAG = "PepperjackTest"
+        val drivenExamples = setOf("Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator", "Half adder (logic gates)")
     }
 }

@@ -1,13 +1,11 @@
 package io.github.l0gic0l.pepperjack
 
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.filterToOne
-import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -15,6 +13,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.printToLog
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.l0gic0l.pepperjack.ui.home.NEW_CIRCUIT_LIST
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,8 +49,7 @@ class UserFlowTest {
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
         rule.waitUntilAtLeastOneExists(hasText("Examples"), timeoutMillis = 10_000)
         // The examples are a lazy list; scroll the sheet until the item is composed.
-        rule.onAllNodes(hasScrollToNodeAction()).filterToOne(hasAnyDescendant(hasText("Examples")))
-            .performScrollToNode(hasText("Light switch (try live mode)"))
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Light switch (try live mode)"))
         rule.onNodeWithText("Light switch (try live mode)").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
         rule.onNodeWithContentDescription("Live simulation").performClick()

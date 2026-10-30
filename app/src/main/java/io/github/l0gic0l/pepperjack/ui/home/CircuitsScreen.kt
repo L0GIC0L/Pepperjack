@@ -66,6 +66,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -329,6 +330,9 @@ private fun CircuitCard(
     }
 }
 
+/** Test tag of the new-circuit sheet's list (blank circuits, import, examples). */
+const val NEW_CIRCUIT_LIST = "new-circuit-list"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewCircuitSheet(
@@ -338,7 +342,7 @@ private fun NewCircuitSheet(
     onExample: (Int) -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), modifier = Modifier.testTag(NEW_CIRCUIT_LIST)) {
             item {
                 ListItem(
                     headlineContent = { Text("Blank schematic") },
