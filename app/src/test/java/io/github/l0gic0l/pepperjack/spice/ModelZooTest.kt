@@ -240,7 +240,12 @@ class ModelZooTest {
         val result = Netlister.netlist(circuit, live = true)
         val pins = circuit.schematic.parts.filter { it.kind != PartKind.GROUND && it.kind != PartKind.LABEL }.sumOf { it.pinPositions().size }
         assertEquals(pins, result.pinCurrents.values.sumOf { it.size })
-        assertEquals(pins, result.text.lines().count { it.startsWith("V${Netlister.LIVE_AMMETER}") })
+        assertEquals(pins, result.text.lines().count { it.startsWith(Netlister.LIVE_AMMETER) })
+        // Every current the live view reads must be the branch vector ngspice makes for an element in the deck.
+        val elements = result.text.lines().map { it.substringBefore(' ').lowercase() }.toSet()
+        result.pinCurrents.values.flatten().forEach { vector ->
+            assertTrue(vector, vector.endsWith("#branch") && vector.removeSuffix("#branch") in elements)
+        }
         assertEquals(AnalysisType.TRAN, result.liveAnalysis)
     }
 }

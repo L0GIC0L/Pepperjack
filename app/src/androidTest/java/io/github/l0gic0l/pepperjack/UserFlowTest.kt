@@ -52,9 +52,20 @@ class UserFlowTest {
         rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Light switch (try live mode)"))
         rule.onNodeWithText("Light switch (try live mode)").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
+        // The live view animates continuously, so Compose never idles: drive the frame clock by hand.
+        rule.mainClock.autoAdvance = false
         rule.onNodeWithContentDescription("Live simulation").performClick()
-        rule.waitUntilAtLeastOneExists(hasContentDescription("Stop live simulation"), timeoutMillis = 10_000)
-        rule.waitUntilAtLeastOneExists(hasText("Operating point"), timeoutMillis = 60_000)
+        waitWithFrames { rule.onAllNodes(hasContentDescription("Stop live simulation")).fetchSemanticsNodes().isNotEmpty() }
+        waitWithFrames { rule.onAllNodes(hasText("Operating point")).fetchSemanticsNodes().isNotEmpty() }
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+    }
+
+    private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (!condition()) {
+            check(System.currentTimeMillis() < deadline) { "Timed out waiting for the live view" }
+            rule.mainClock.advanceTimeBy(100)
+            Thread.sleep(20)
+        }
     }
 }

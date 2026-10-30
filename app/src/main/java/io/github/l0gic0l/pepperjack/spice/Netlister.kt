@@ -132,8 +132,11 @@ object Netlister {
     private val includeDirective = Regex("""(?im)^\s*\.(include|inc|lib)\b""")
     private val userModel = Regex("""(?im)^\s*\.model\s+(\S+)\s+([A-Za-z_]+)""")
 
-    /** Prefix of the zero-volt sources that measure pin currents in live netlists (hidden from traces). */
-    const val LIVE_AMMETER = "vpj_"
+    /**
+     * Name prefix of the zero-volt sources that measure pin currents in live netlists. ngspice
+     * reports their currents as lower-case "vpj_…#branch" vectors, which are hidden from traces.
+     */
+    const val LIVE_AMMETER = "Vpj_"
 
     /** Parts with a native ngspice current vector when they are primitive devices. */
     private val nativeCurrent = setOf(
@@ -269,9 +272,10 @@ object Netlister {
             if (live) {
                 pinCurrents[part.id] = nets.indices.map { i ->
                     val node = "pj_${part.id}_$i"
-                    ammeters += "V${LIVE_AMMETER}${part.id}_$i ${nets[i]} $node 0"
+                    val ammeter = "$LIVE_AMMETER${part.id}_$i"
+                    ammeters += "$ammeter ${nets[i]} $node 0"
                     nets[i] = node
-                    "$LIVE_AMMETER${part.id}_$i#branch"
+                    ammeter.lowercase(Locale.ROOT) + "#branch"
                 }
             }
 
