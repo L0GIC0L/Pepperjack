@@ -109,7 +109,10 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   and many other makers. The app ships only an index of names (250 kB); a file
   is downloaded from GitHub when you add it, with its maker's notice, and stays
   under its maker's terms. From a part's model picker, "Find more models
-  online" lists only the models that fit that symbol.
+  online" lists only the models that fit that symbol. Every model was
+  load-checked in ngspice when the index was built: 84% load as they are, and
+  the browser marks the rest (mostly LTspice-only syntax, or references to
+  models in other files).
 - Symbol editor: make a symbol for any library subcircuit, the way LTspice
   generates block symbols. It starts from an automatic arrangement (supplies
   on top and bottom, inputs left, outputs right). You can then choose a block
