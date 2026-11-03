@@ -12,6 +12,8 @@ import io.github.l0gic0l.pepperjack.sim.LiveView
 import io.github.l0gic0l.pepperjack.spice.ModelZoo
 import io.github.l0gic0l.pepperjack.spice.Netlister
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -31,12 +33,17 @@ class EngineInstrumentedTest {
         for (example in Examples.all) {
             val circuit = example.build()
             val dialect = circuit.dialect ?: SpiceDialect.Default
-            val result = if (circuit.kind == CircuitKind.SCHEMATIC) {
-                val netlist = Netlister.netlist(circuit)
-                container.engine.run(netlist.text, dialect, netlist.probeVectors, netlist.warnings)
-            } else {
-                container.engine.run(circuit.netlist, dialect)
+            // A run that stalls fails the test with its name, instead of hanging the job.
+            val result = withTimeoutOrNull(RUN_TIMEOUT_MS) {
+                if (circuit.kind == CircuitKind.SCHEMATIC) {
+                    val netlist = Netlister.netlist(circuit)
+                    container.engine.run(netlist.text, dialect, netlist.probeVectors, netlist.warnings)
+                } else {
+                    container.engine.run(circuit.netlist, dialect)
+                }
             }
+            assertNotNull("${example.title} took over ${RUN_TIMEOUT_MS / 1000} s", result)
+            result!!
             Log.i(TAG, "${example.title}: ${result.plots.size} plots, error=${result.error}, ${result.elapsedMs} ms")
             result.log.filter { it.isError }.forEach { Log.w(TAG, "  ${it.text}") }
             assertTrue("${example.title}: ${result.error}", result.succeeded)
@@ -57,7 +64,11 @@ class EngineInstrumentedTest {
             val circuit = example.build()
             if (circuit.kind != CircuitKind.SCHEMATIC) continue
             val netlist = Netlister.netlist(circuit, live = true)
-            val result = container.engine.run(netlist.text, circuit.dialect ?: SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            val result = withTimeoutOrNull(RUN_TIMEOUT_MS) {
+                container.engine.run(netlist.text, circuit.dialect ?: SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            }
+            assertNotNull("${example.title} (live) took over ${RUN_TIMEOUT_MS / 1000} s", result)
+            result!!
             assertTrue("${example.title}: ${result.error}", result.succeeded)
             val view = LiveView.build(circuit.schematic, netlist, result)
             Log.i(TAG, "${example.title} live: ${view?.segments?.size} segments, ${view?.samples} samples, max ${view?.maxCurrent} A")
@@ -116,6 +127,7 @@ class EngineInstrumentedTest {
 
     private companion object {
         const val TAG = "PepperjackTest"
+        const val RUN_TIMEOUT_MS = 5 * 60_000L
         val drivenExamples = setOf(
             "Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator",
             "Half adder (logic gates)", "Voltage divider", "Kirchhoff's current law", "Wheatstone bridge",

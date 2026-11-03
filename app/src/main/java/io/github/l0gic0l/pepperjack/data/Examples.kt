@@ -625,8 +625,9 @@ object Examples {
                 |* Calibrated for a 100-ohm platinum RTD, 0-100 C = 0-10 V: zero with R80, span with R77.
                 |* Set the RTD temperature in degrees C:
                 |.param tdeg=50
-                |* Steps of 20 us resolve the clock; results are kept every 100 us.
-                |.options interp
+                |* Steps of 20 us resolve the clock; results are kept every 100 us. A 1 Tohm shunt on
+                |* every node keeps the switching converging when live mode adds its current meters.
+                |.options interp rshunt=1e12
                 |K2 LT3_p L46 0.999
                 |K3 LT3_s L46 0.999
             """.trimMargin(),

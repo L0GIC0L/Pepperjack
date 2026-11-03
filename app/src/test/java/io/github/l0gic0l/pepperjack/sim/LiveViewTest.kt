@@ -91,4 +91,63 @@ class LiveViewTest {
         assertEquals(2.0, view.position(9.0), 0.0)
         assertEquals(15.0, LiveView.sample(doubleArrayOf(10.0, 20.0), 0.5), 1e-12)
     }
+
+    /** A probe part reads its net's voltage and the current along the wire under its tip. */
+    @Test
+    fun probePartsReadVoltageAndWireCurrent() {
+        val probed = circuit.copy(
+            schematic = schematic.copy(
+                parts = schematic.parts + listOf(
+                    Part(20, PartKind.PROBE, "PR1", 6, -2, value = "V I"),
+                    Part(21, PartKind.PROBE, "PR2", 8, 3, value = "V I"),
+                    Part(22, PartKind.PROBE, "PR3", 4, 4, value = "V I"),
+                ),
+            ),
+        )
+        val netlist = Netlister.netlist(probed, live = true)
+        assertEquals(emptyList<String>(), netlist.warnings)
+        // PR2 and PR3 sit on the ground net, which has no voltage vector to plot.
+        assertEquals(1, netlist.probeVectors.count { it.probe.type == ProbeType.VOLTAGE })
+        val currents = mapOf(1L to listOf(-1e-3, 1e-3), 2L to listOf(1e-3, -1e-3), 3L to listOf(1e-3, -1e-3))
+        val vectors = netlist.pinCurrents.flatMap { (id, names) ->
+            names.mapIndexed { pin, name -> Vector(name.lowercase(), Quantity.CURRENT, doubleArrayOf(currents.getValue(id)[pin])) }
+        } + netlist.pinNets.values.flatten().distinct().filter { it != "0" }.map { net ->
+            Vector(net.lowercase(), Quantity.VOLTAGE, doubleArrayOf(if (net == netlist.pinNets.getValue(1L)[0]) 3.0 else 2.0))
+        }
+        val result = SimulationResult(listOf(Plot("op1", "Operating point", PlotKind.OP, null, vectors)), emptyList(), emptyList(), null)
+        val view = checkNotNull(LiveView.build(probed.schematic, netlist, result))
+        val byId = view.probes.associateBy { it.partId }
+        // Between R1 and R2 the current runs rightward; down through the wire under R2; leftward back along the bottom.
+        assertEquals(2.0, byId.getValue(20).voltage!![0], 0.0)
+        assertEquals(1e-3, byId.getValue(20).current!![0], 1e-12)
+        assertEquals("→", byId.getValue(20).direction)
+        assertEquals(1e-3, byId.getValue(21).current!![0], 1e-12)
+        assertEquals("↓", byId.getValue(21).direction)
+        assertEquals(0.0, byId.getValue(22).voltage!![0], 0.0)
+        assertEquals(-1e-3, byId.getValue(22).current!![0], 1e-12)
+    }
+
+    @Test
+    fun probesNeedSomethingToTouch() {
+        val stray = circuit.copy(schematic = schematic.copy(parts = schematic.parts + Part(30, PartKind.PROBE, "PR9", 20, 20)))
+        assertEquals(listOf("PR9 is not on a wire or a pin."), Netlister.netlist(stray).warnings)
+        // A probe is not a connection: a pin that only a probe touches is still open.
+        val open = circuit.copy(
+            schematic = schematic.copy(
+                parts = schematic.parts + Part(31, PartKind.RESISTOR, "R9", 30, 0, value = "1k") + Part(32, PartKind.PROBE, "PR1", 30, 0),
+            ),
+        )
+        val warnings = Netlister.netlist(open).warnings
+        assert(warnings.any { it.startsWith("R9 pin 1") }) { warnings.toString() }
+    }
+
+    @Test
+    fun oldVoltageProbesBecomeProbeParts() {
+        val old = schematic.copy(probes = listOf(Probe(ProbeType.VOLTAGE, 4, -2), Probe(ProbeType.CURRENT, partId = 3)))
+        val migrated = old.withProbeParts()
+        val probe = migrated.parts.single { it.kind == PartKind.PROBE }
+        assertEquals("PR1" to GridPoint(4, -2), probe.ref to probe.origin)
+        assertEquals(listOf(Probe(ProbeType.CURRENT, partId = 3)), migrated.probes)
+        assertEquals(old.allProbes.toSet(), migrated.allProbes.toSet())
+    }
 }

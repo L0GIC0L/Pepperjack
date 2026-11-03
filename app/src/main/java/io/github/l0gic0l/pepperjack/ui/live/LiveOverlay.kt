@@ -33,6 +33,9 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import io.github.l0gic0l.pepperjack.model.MeterMode
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.Probe
+import io.github.l0gic0l.pepperjack.model.ProbeType
+import io.github.l0gic0l.pepperjack.model.ProbeValue
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.transformPoint
 import io.github.l0gic0l.pepperjack.sim.LiveReadout
@@ -156,6 +159,8 @@ fun LiveOverlay(
     mode: LiveColorMode,
     inspectWireId: Long?,
     modifier: Modifier = Modifier,
+    /** Trace colours, for the probes' tags. */
+    probeColors: Map<Probe, Color> = emptyMap(),
 ) {
     val palette = rememberLivePalette()
     val textMeasurer = rememberTextMeasurer()
@@ -171,7 +176,7 @@ fun LiveOverlay(
     Canvas(modifier.clipToBounds()) {
         animator.frame // redraw every frame
         if (viewport.scale == 0f) return@Canvas
-        drawLive(animator, schematic, viewport, mode, inspectWireId, palette, textMeasurer)
+        drawLive(animator, schematic, viewport, mode, inspectWireId, palette, textMeasurer, probeColors)
     }
 }
 
@@ -183,6 +188,7 @@ private fun DrawScope.drawLive(
     inspectWireId: Long?,
     palette: LivePalette,
     textMeasurer: TextMeasurer,
+    probeColors: Map<Probe, Color>,
 ) {
     val view = animator.view
     val transform = viewport.transform
@@ -246,6 +252,20 @@ private fun DrawScope.drawLive(
         val text = meterText(part.meter, readout, view, position)
         val (fx, fy) = transformPoint(0f, 2f, part.rotation, part.mirrored)
         drawTag(textMeasurer, text, style, palette, transform.toScreen(part.x + fx, part.y + fy), centered = true)
+    }
+
+    // Measurement probes show their readings in a tag, as Multisim's probes do.
+    val transient = view.duration > 0
+    val occupied = ArrayList<androidx.compose.ui.geometry.Rect>()
+    view.probes.forEach { probe ->
+        val part = schematic.parts.firstOrNull { it.id == probe.partId } ?: return@forEach
+        val voltage = probe.voltage?.let { ProbeQuantity(LiveView.sample(it, position), if (transient) view.stats(probe, false) else null) }
+        val current = probe.current?.let {
+            ProbeQuantity(LiveView.sample(it, position), if (transient) view.stats(probe, true) else null, probe.direction)
+        }
+        val lines = probeLines(ProbeValue.parse(part.value), voltage, current, transient)
+        val accent = probeColors[Probe(ProbeType.VOLTAGE, part.x, part.y)] ?: palette.hot
+        drawProbeTag(textMeasurer, part.ref, lines, accent, palette, probeHead(part, transform), occupied)
     }
 
     inspectWireId?.let { id ->

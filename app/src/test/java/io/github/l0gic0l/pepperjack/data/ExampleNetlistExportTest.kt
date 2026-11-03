@@ -38,6 +38,11 @@ class ExampleNetlistExportTest {
                     val name = String.format(Locale.ROOT, "%02d-%s%s.%s.cir", index + 1, slug, suffix, behavior)
                     File(dir, name).writeText(step.netlist)
                 }
+                // Live mode adds a current meter at every pin, which can change how a circuit converges.
+                if (circuit.kind == CircuitKind.SCHEMATIC) {
+                    val live = Preprocessor.prepare(Netlister.netlist(circuit, live = true).text, dialect).runs.first()
+                    File(dir, String.format(Locale.ROOT, "%02d-%s-live.%s.cir", index + 1, slug, behavior)).writeText(live.netlist)
+                }
             }
         }
     }

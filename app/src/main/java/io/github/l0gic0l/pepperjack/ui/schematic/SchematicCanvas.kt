@@ -78,7 +78,7 @@ class SchematicViewport {
     }
 }
 
-private enum class DragMode { NONE, PAN, MOVE_PART, WIRE, PLACE, TRANSFORM }
+private enum class DragMode { NONE, PAN, MOVE_PART, MOVE_GROUP, AREA, WIRE, PLACE, TRANSFORM }
 
 @Composable
 fun SchematicCanvas(
@@ -98,6 +98,10 @@ fun SchematicCanvas(
     dropGhost: Part? = null,
     /** A part drag starts (true) or ends (false). */
     onPartDragging: (Boolean) -> Unit = {},
+    /** The area tool's box was dragged out from one corner to the other. */
+    onSelectArea: (GridPoint, GridPoint) -> Unit = { _, _ -> },
+    /** The multi-selection was dragged by whole grid steps. */
+    onMoveGroup: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val colors = LocalCircuitColors.current
     val textMeasurer = rememberTextMeasurer()
@@ -116,9 +120,13 @@ fun SchematicCanvas(
     val movePart by rememberUpdatedState(onMovePart)
     val drawWire by rememberUpdatedState(onDrawWire)
     val partDragging by rememberUpdatedState(onPartDragging)
+    val selectArea by rememberUpdatedState(onSelectArea)
+    val moveGroup by rememberUpdatedState(onMoveGroup)
 
-    var dragPartId by remember { mutableStateOf<Long?>(null) }
+    // What a drag is moving: whole parts and wires, and the wire ends that stretch after them.
+    var drag by remember { mutableStateOf<DragSet?>(null) }
     var dragDelta by remember { mutableStateOf(GridPoint(0, 0)) }
+    var area by remember { mutableStateOf<Pair<Offset, Offset>?>(null) }
     var wirePreview by remember { mutableStateOf<Pair<GridPoint, GridPoint>?>(null) }
     var ghost by remember { mutableStateOf<GridPoint?>(null) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
@@ -176,6 +184,8 @@ fun SchematicCanvas(
                     val tolerance = touchTolerance / transform.scale
                     val startPoint = GridPoint(downGrid.x.roundToInt(), downGrid.y.roundToInt())
                     val hitPart = hitPart(schematicNow, downGrid, tolerance)
+                    val hitWireAtDown = if (hitPart == null) hitWire(schematicNow, downGrid, tolerance) else null
+                    val onGroup = (hitPart != null && hitPart.id in stateNow.group) || (hitWireAtDown != null && hitWireAtDown.id in stateNow.groupWires)
                     var mode = DragMode.NONE
                     if (stateNow.placing != null) {
                         mode = DragMode.PLACE
@@ -189,9 +199,11 @@ fun SchematicCanvas(
                         if (pressed.isEmpty()) break
                         if (pressed.size >= 2) {
                             if (mode != DragMode.TRANSFORM) {
-                                if (mode == DragMode.MOVE_PART) partDragging(false)
-                                dragPartId = null
+                                if (mode == DragMode.MOVE_PART || mode == DragMode.MOVE_GROUP) partDragging(false)
+                                drag = null
+                                dragDelta = GridPoint(0, 0)
                                 wirePreview = null
+                                area = null
                             }
                             mode = DragMode.TRANSFORM
                             moved = true
@@ -208,25 +220,37 @@ fun SchematicCanvas(
                         if (!moved && (change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
                             moved = true
                             if (mode == DragMode.NONE) {
+                                val selecting = stateNow.tool == Tool.SELECT || stateNow.tool == Tool.AREA
                                 mode = when {
                                     stateNow.tool == Tool.WIRE -> DragMode.WIRE
+                                    selecting && onGroup -> DragMode.MOVE_GROUP
+                                    stateNow.tool == Tool.AREA -> DragMode.AREA
                                     stateNow.tool == Tool.SELECT && hitPart != null -> DragMode.MOVE_PART
                                     else -> DragMode.PAN
                                 }
-                                if (mode == DragMode.MOVE_PART) {
-                                    dragPartId = hitPart!!.id
-                                    dragPart(hitPart)
-                                    partDragging(true)
+                                when (mode) {
+                                    DragMode.MOVE_PART -> {
+                                        drag = DragSet.of(schematicNow, setOf(hitPart!!.id), emptySet())
+                                        dragPart(hitPart)
+                                        partDragging(true)
+                                    }
+                                    DragMode.MOVE_GROUP -> {
+                                        drag = DragSet.of(schematicNow, stateNow.group, stateNow.groupWires)
+                                        partDragging(true)
+                                    }
+                                    DragMode.AREA -> area = downGrid to downGrid
+                                    else -> Unit
                                 }
                             }
                         }
                         if (moved) {
                             when (mode) {
                                 DragMode.PAN -> viewport.offset += change.position - change.previousPosition
-                                DragMode.MOVE_PART -> {
+                                DragMode.MOVE_PART, DragMode.MOVE_GROUP -> {
                                     val g = viewport.transform.toGrid(change.position)
                                     dragDelta = GridPoint((g.x - downGrid.x).roundToInt(), (g.y - downGrid.y).roundToInt())
                                 }
+                                DragMode.AREA -> area = downGrid to viewport.transform.toGrid(change.position)
                                 DragMode.WIRE -> wirePreview = startPoint to snap(change.position)
                                 DragMode.PLACE -> ghost = snap(change.position)
                                 else -> Unit
@@ -237,10 +261,22 @@ fun SchematicCanvas(
 
                     when (mode) {
                         DragMode.MOVE_PART -> {
-                            dragPartId?.let { movePart(it, dragDelta.x, dragDelta.y) }
-                            dragPartId = null
+                            drag?.parts?.firstOrNull()?.let { movePart(it, dragDelta.x, dragDelta.y) }
+                            drag = null
                             dragDelta = GridPoint(0, 0)
                             partDragging(false)
+                        }
+                        DragMode.MOVE_GROUP -> {
+                            moveGroup(dragDelta.x, dragDelta.y)
+                            drag = null
+                            dragDelta = GridPoint(0, 0)
+                            partDragging(false)
+                        }
+                        DragMode.AREA -> {
+                            area?.let { (a, b) ->
+                                selectArea(GridPoint(a.x.roundToInt(), a.y.roundToInt()), GridPoint(b.x.roundToInt(), b.y.roundToInt()))
+                            }
+                            area = null
                         }
                         DragMode.WIRE -> {
                             wirePreview?.let { (a, b) -> drawWire(a, b) }
@@ -252,7 +288,7 @@ fun SchematicCanvas(
                             val isDouble = now - lastTapTime < 300 && (down.position - lastTapPosition).getDistance() < touchTolerance * 2
                             lastTapTime = now
                             lastTapPosition = down.position
-                            val hitWire = if (hitPart == null || stateNow.tool == Tool.WIRE) hitWire(schematicNow, downGrid, tolerance) else null
+                            val hitWire = if (hitPart == null || stateNow.tool == Tool.WIRE) hitWireAtDown ?: hitWire(schematicNow, downGrid, tolerance) else null
                             tap(startPoint, if (stateNow.tool == Tool.WIRE) null else hitPart, hitWire)
                             if (isDouble && hitPart != null && stateNow.tool == Tool.SELECT) doubleTap(hitPart)
                         }
@@ -267,12 +303,14 @@ fun SchematicCanvas(
 
         if (showGrid) drawGrid(transform, colors.grid)
 
+        val moving = drag
+        fun shown(p: GridPoint): GridPoint = moving?.let { if (p in it.points) GridPoint(p.x + dragDelta.x, p.y + dragDelta.y) else p } ?: p
         schematic.wires.forEach { wire ->
-            val selected = wire.id == state.selectedWireId
+            val selected = wire.id == state.selectedWireId || wire.id in state.groupWires
             drawLine(
                 if (selected) colors.selection else colors.wire,
-                transform.toScreen(dragged(wire.start, schematic, dragPartId, dragDelta)),
-                transform.toScreen(dragged(wire.end, schematic, dragPartId, dragDelta)),
+                transform.toScreen(shown(wire.start)),
+                transform.toScreen(shown(wire.end)),
                 if (selected) stroke * 1.8f else stroke,
                 StrokeCap.Round,
             )
@@ -280,10 +318,15 @@ fun SchematicCanvas(
         analysis.junctions.forEach { drawCircle(colors.wire, radius = 3.5.dp.toPx(), center = transform.toScreen(it)) }
 
         schematic.parts.forEach { part ->
-            val moving = part.id == dragPartId
-            val dx = if (moving) dragDelta.x.toFloat() else 0f
-            val dy = if (moving) dragDelta.y.toFloat() else 0f
-            val color = if (part.id == state.selectedPartId) colors.selection else colors.part
+            val follows = moving != null && (part.id in moving.parts || (part.kind == PartKind.PROBE && part.origin in moving.points))
+            val dx = if (follows) dragDelta.x.toFloat() else 0f
+            val dy = if (follows) dragDelta.y.toFloat() else 0f
+            val color = when {
+                part.id == state.selectedPartId || part.id in state.group -> colors.selection
+                // A probe takes the colour of its trace, as in LTspice.
+                part.kind == PartKind.PROBE -> probeColors[Probe(ProbeType.VOLTAGE, part.x, part.y)] ?: colors.part
+                else -> colors.part
+            }
             drawPart(part, transform, color, stroke, textMeasurer, dx, dy)
             drawPartLabels(part, transform, textMeasurer, colors.part.copy(alpha = 0.85f), labelBackground, labelText, dx, dy)
         }
@@ -295,6 +338,18 @@ fun SchematicCanvas(
         }
 
         drawProbes(schematic, transform, probeColors)
+
+        area?.let { (a, b) ->
+            val p = transform.toScreen(minOf(a.x, b.x), minOf(a.y, b.y))
+            val q = transform.toScreen(maxOf(a.x, b.x), maxOf(a.y, b.y))
+            drawRect(colors.selection.copy(alpha = 0.12f), topLeft = p, size = Size(q.x - p.x, q.y - p.y))
+            drawRect(
+                colors.selection,
+                topLeft = p,
+                size = Size(q.x - p.x, q.y - p.y),
+                style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 6f))),
+            )
+        }
 
         state.wireStart?.let { start ->
             val c = transform.toScreen(start)
@@ -331,20 +386,29 @@ private class SchematicAnalysis(val junctions: Set<GridPoint>, val openPins: Lis
 
 private fun analyze(schematic: Schematic): SchematicAnalysis {
     val connectivity = Connectivity(schematic)
-    val pins = schematic.parts.flatMap { it.pinPositions() }
+    val pins = schematic.parts.filter { it.kind != PartKind.PROBE }.flatMap { it.pinPositions() }
     val pinCounts = pins.groupingBy { connectivity.root(it) }.eachCount()
     val open = schematic.parts
-        .filter { it.kind != PartKind.LABEL }
+        .filter { it.kind != PartKind.LABEL && it.kind != PartKind.PROBE }
         .flatMap { it.pinPositions() }
         .filter { (pinCounts[connectivity.root(it)] ?: 0) < 2 }
     return SchematicAnalysis(schematic.junctions(), open)
 }
 
-/** Where a wire end is drawn while its part is being dragged (rubber-banding preview). */
-private fun dragged(point: GridPoint, schematic: Schematic, partId: Long?, delta: GridPoint): GridPoint {
-    if (partId == null) return point
-    val part = schematic.parts.firstOrNull { it.id == partId } ?: return point
-    return if (point in part.pinPositions()) GridPoint(point.x + delta.x, point.y + delta.y) else point
+/**
+ * What a drag moves, for the preview: the parts being dragged, and every point that moves
+ * with them (their pins and the dragged wires' ends), which stretches the wires attached there.
+ */
+private class DragSet(val parts: Set<Long>, val points: Set<GridPoint>) {
+    companion object {
+        fun of(schematic: Schematic, partIds: Set<Long>, wireIds: Set<Long>) = DragSet(
+            partIds,
+            buildSet {
+                schematic.parts.filter { it.id in partIds && it.kind != PartKind.PROBE }.forEach { addAll(it.pinPositions()) }
+                schematic.wires.filter { it.id in wireIds }.forEach { add(it.start); add(it.end) }
+            },
+        )
+    }
 }
 
 private fun DrawScope.drawGrid(transform: GridTransform, color: Color) {

@@ -115,7 +115,8 @@ fun Schematic.junctions(): Set<GridPoint> {
         counts.merge(it.start, 1, Int::plus)
         counts.merge(it.end, 1, Int::plus)
     }
-    parts.forEach { part -> part.pinPositions().forEach { counts.merge(it, 1, Int::plus) } }
+    // A probe touches a net without joining anything to it, so it makes no junction.
+    parts.filter { it.kind != PartKind.PROBE }.forEach { part -> part.pinPositions().forEach { counts.merge(it, 1, Int::plus) } }
     val candidates = counts.keys.toList()
     for (wire in wires) {
         for (point in candidates) {
@@ -224,6 +225,8 @@ object Netlister {
         // Count device pins on every net to spot floating pins.
         val pinsOnNet = HashMap<Int, Int>()
         schematic.parts.forEach { part ->
+            // A probe only looks at a net; it doesn't connect anything to it.
+            if (part.kind == PartKind.PROBE) return@forEach
             part.pinPositions().forEach { point -> connectivity.root(point)?.let { pinsOnNet.merge(it, 1, Int::plus) } }
         }
 
@@ -378,8 +381,18 @@ object Netlister {
             }
         }
 
-        for (probe in schematic.probes) {
+        for (part in schematic.parts) {
+            if (part.kind != PartKind.PROBE) continue
+            val tip = part.pinPositions()[0]
+            val touches = schematic.wires.any { it.contains(tip) } || schematic.parts.any { it.id != part.id && tip in it.pinPositions() }
+            val root = connectivity.root(tip)
+            if (!touches || root == null) warnings += "${part.ref} is not on a wire or a pin." else pinNets[part.id] = listOf(nameFor(root))
+        }
+
+        for (probe in schematic.allProbes) {
             if (probe.type != ProbeType.VOLTAGE) continue
+            val probePart = schematic.probePart(probe)
+            if (probePart != null && probePart.id !in pinNets) continue
             val root = connectivity.root(GridPoint(probe.x, probe.y)) ?: continue
             val net = nameFor(root)
             if (net == "0") continue

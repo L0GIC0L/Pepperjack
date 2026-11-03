@@ -144,7 +144,8 @@ fun DrawScope.drawPartLabels(
     val right = b[2] + dx
     val bottom = b[3] + dy
     when (part.kind) {
-        PartKind.GROUND -> return
+        // A probe's name is on its tag; beside the probe it would sit on the net's label.
+        PartKind.GROUND, PartKind.PROBE -> return
         PartKind.LABEL -> {
             val layout = textMeasurer.measure(part.value, style.copy(color = labelText, fontWeight = FontWeight.Medium))
             val anchor = transform.toScreen(part.x + dx, part.y + dy)
@@ -183,7 +184,7 @@ fun DrawScope.drawPartLabels(
 
 /** The value text shown beside a part, or null when the symbol already shows it. */
 fun displayValue(part: Part): String? = when {
-    part.kind == PartKind.SPST || part.kind == PartKind.SPDT || part.kind == PartKind.AMMETER -> null
+    part.kind == PartKind.SPST || part.kind == PartKind.SPDT || part.kind == PartKind.AMMETER || part.kind == PartKind.PROBE -> null
     part.kind == PartKind.VOLTMETER && part.value.trim().let { it.isEmpty() || it.equals("10Meg", true) } -> null
     part.kind == PartKind.CUSTOM -> listOfNotNull(part.symbol?.title, part.value.takeIf { it.isNotBlank() }).joinToString(" ")
     part.def.category == PartCategory.DIGITAL -> part.value.trim().takeIf { it.isNotEmpty() && it != "5" }?.let { "$it V" }

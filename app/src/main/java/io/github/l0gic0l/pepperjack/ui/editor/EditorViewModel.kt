@@ -21,6 +21,7 @@ import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
 import io.github.l0gic0l.pepperjack.model.SwitchValue
 import io.github.l0gic0l.pepperjack.model.Wire
+import io.github.l0gic0l.pepperjack.model.bounds
 import io.github.l0gic0l.pepperjack.model.def
 import io.github.l0gic0l.pepperjack.model.pinPositions
 import io.github.l0gic0l.pepperjack.sim.LiveView
@@ -40,7 +41,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Tool { SELECT, WIRE, PROBE, DELETE }
+enum class Tool { SELECT, AREA, WIRE, PROBE, DELETE }
 
 data class EditorState(
     val loaded: Boolean = false,
@@ -53,6 +54,11 @@ data class EditorState(
     val placingMirrored: Boolean = false,
     val selectedPartId: Long? = null,
     val selectedWireId: Long? = null,
+    /** Where on the selected wire it was tapped, snapped to the grid. */
+    val selectedWirePoint: GridPoint? = null,
+    /** A multi-selection, made with the area tool: these parts and wires move together. */
+    val group: Set<Long> = emptySet(),
+    val groupWires: Set<Long> = emptySet(),
     /** Start of the wire being drawn with taps (LTspice-style click, click). */
     val wireStart: GridPoint? = null,
     /** Part whose properties sheet is open. */
@@ -60,6 +66,8 @@ data class EditorState(
     val running: Boolean = false,
     /** Counts runs started with the Run button, so the UI can switch to the results for those only. */
     val runCount: Int = 0,
+    /** Bumped when a new trace should be looked at in the results. */
+    val resultsRequests: Int = 0,
     val result: SimulationResult? = null,
     /** Visible traces per analysis, by ngspice vector name. */
     val traces: Map<PlotKind, Set<String>> = emptyMap(),
@@ -75,6 +83,7 @@ data class EditorState(
     val inspectWireId: Long? = null,
 ) {
     val selectedPart: Part? get() = circuit?.schematic?.parts?.firstOrNull { it.id == selectedPartId }
+    val hasGroup: Boolean get() = group.isNotEmpty() || groupWires.isNotEmpty()
 }
 
 class EditorViewModel(private val container: AppContainer, private val circuitId: String) : ViewModel() {
@@ -92,7 +101,9 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
 
     init {
         viewModelScope.launch {
-            _state.update { it.copy(loaded = true, circuit = container.circuits.get(circuitId)) }
+            // Voltage probes from older files become probe parts, which can be selected and moved.
+            val circuit = container.circuits.get(circuitId)?.let { it.copy(schematic = it.schematic.withProbeParts()) }
+            _state.update { it.copy(loaded = true, circuit = circuit) }
         }
     }
 
@@ -152,7 +163,10 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     // ---- tools ----
 
     fun setTool(tool: Tool) = _state.update {
-        it.copy(tool = tool, placing = null, wireStart = null, selectedPartId = null, selectedWireId = null)
+        it.copy(
+            tool = tool, placing = null, wireStart = null, selectedPartId = null, selectedWireId = null,
+            group = emptySet(), groupWires = emptySet(),
+        )
     }
 
     fun startPlacing(choice: PartChoice) = _state.update {
@@ -177,8 +191,19 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
             state.live && state.tool == Tool.SELECT && hitPart != null &&
                 (hitPart.kind == PartKind.SPST || hitPart.kind == PartKind.SPDT) -> toggleSwitch(hitPart)
             state.tool == Tool.SELECT -> _state.update {
-                val wire = if (hitPart == null) hitWire?.id else null
-                it.copy(selectedPartId = hitPart?.id, selectedWireId = wire, inspectWireId = if (it.live) wire else null)
+                val wire = if (hitPart == null) hitWire else null
+                it.copy(
+                    selectedPartId = hitPart?.id, selectedWireId = wire?.id, selectedWirePoint = wire?.nearestGridPoint(point),
+                    inspectWireId = if (it.live) wire?.id else null, group = emptySet(), groupWires = emptySet(),
+                )
+            }
+            // The area tool adds and removes single items from the selection with a tap.
+            state.tool == Tool.AREA -> _state.update {
+                when {
+                    hitPart != null -> it.copy(group = if (hitPart.id in it.group) it.group - hitPart.id else it.group + hitPart.id)
+                    hitWire != null -> it.copy(groupWires = if (hitWire.id in it.groupWires) it.groupWires - hitWire.id else it.groupWires + hitWire.id)
+                    else -> it.copy(group = emptySet(), groupWires = emptySet())
+                }
             }
             state.tool == Tool.WIRE -> {
                 val start = state.wireStart
@@ -290,25 +315,120 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         (start == other.start && end == other.end) || (start == other.end && end == other.start)
 
     /** Moves a part by whole grid steps, dragging attached wire ends along (rubber-banding). */
-    fun movePart(id: Long, dx: Int, dy: Int) {
+    fun movePart(id: Long, dx: Int, dy: Int) = moveItems(setOf(id), emptySet(), dx, dy)
+
+    /** Moves the multi-selection by whole grid steps. */
+    fun moveGroup(dx: Int, dy: Int) {
+        val state = _state.value
+        moveItems(state.group, state.groupWires, dx, dy)
+    }
+
+    /**
+     * Moves [partIds] and [wireIds] together. Wire ends attached to a moved pin or a moved
+     * wire's end come along (rubber-banding), and so do probes sitting on them; a probe moved
+     * on its own leaves the wires where they are.
+     */
+    private fun moveItems(partIds: Set<Long>, wireIds: Set<Long>, dx: Int, dy: Int) {
         if (dx == 0 && dy == 0) return
         edit { s ->
-            val part = s.parts.firstOrNull { it.id == id } ?: return@edit s
-            val pins = part.pinPositions().toSet()
-            fun shift(p: GridPoint) = if (p in pins) GridPoint(p.x + dx, p.y + dy) else p
+            val map = movingPoints(s, partIds, wireIds).associateWith { GridPoint(it.x + dx, it.y + dy) }
+            s.moved(partIds, wireIds, map) { it.copy(x = it.x + dx, y = it.y + dy) }
+        }
+    }
+
+    private fun movingPoints(s: Schematic, partIds: Set<Long>, wireIds: Set<Long>): Set<GridPoint> = buildSet {
+        s.parts.filter { it.id in partIds && it.kind != PartKind.PROBE }.forEach { addAll(it.pinPositions()) }
+        s.wires.filter { it.id in wireIds }.forEach { add(it.start); add(it.end) }
+    }
+
+    /** Applies [transform] to [partIds], moves [wireIds] and wire ends by [map], and keeps probes on their points. */
+    private fun Schematic.moved(partIds: Set<Long>, wireIds: Set<Long>, map: Map<GridPoint, GridPoint>, transform: (Part) -> Part): Schematic {
+        fun at(p: GridPoint) = map[p] ?: p
+        return copy(
+            parts = parts.map { p ->
+                when {
+                    p.id in partIds -> transform(p)
+                    p.kind == PartKind.PROBE && p.origin in map -> at(p.origin).let { q -> p.copy(x = q.x, y = q.y) }
+                    else -> p
+                }
+            },
+            wires = wires.map { w ->
+                val a = at(w.start)
+                val b = at(w.end)
+                w.copy(x1 = a.x, y1 = a.y, x2 = b.x, y2 = b.y)
+            },
+            probes = probes.map { p ->
+                if (p.type == ProbeType.VOLTAGE) at(GridPoint(p.x, p.y)).let { q -> p.copy(x = q.x, y = q.y) } else p
+            },
+        )
+    }
+
+    /** Selects every part whose middle and every wire whose ends lie in the box from [a] to [b]. */
+    fun selectArea(a: GridPoint, b: GridPoint) {
+        val schematic = _state.value.circuit?.schematic ?: return
+        val xs = minOf(a.x, b.x)..maxOf(a.x, b.x)
+        val ys = minOf(a.y, b.y)..maxOf(a.y, b.y)
+        fun inside(x: Float, y: Float) = x >= xs.first && x <= xs.last && y >= ys.first && y <= ys.last
+        val parts = schematic.parts.filter { p -> p.bounds().let { inside((it[0] + it[2]) / 2, (it[1] + it[3]) / 2) } }.map { it.id }
+        val wires = schematic.wires.filter { w -> inside(w.x1.toFloat(), w.y1.toFloat()) && inside(w.x2.toFloat(), w.y2.toFloat()) }.map { it.id }
+        _state.update { it.copy(group = parts.toSet(), groupWires = wires.toSet(), selectedPartId = null, selectedWireId = null) }
+    }
+
+    fun clearGroup() = _state.update { it.copy(group = emptySet(), groupWires = emptySet()) }
+
+    /** Turns the multi-selection a quarter turn clockwise about its middle. */
+    fun rotateGroup() {
+        val state = _state.value
+        val schematic = state.circuit?.schematic ?: return
+        val parts = schematic.parts.filter { it.id in state.group }
+        val wires = schematic.wires.filter { it.id in state.groupWires }
+        val points = parts.map { it.origin } + wires.flatMap { listOf(it.start, it.end) }
+        if (points.isEmpty()) return
+        val c = GridPoint((points.minOf { it.x } + points.maxOf { it.x }) / 2, (points.minOf { it.y } + points.maxOf { it.y }) / 2)
+        fun turn(p: GridPoint) = GridPoint(c.x - (p.y - c.y), c.y + (p.x - c.x))
+        fun turned(p: Part) = turn(p.origin).let { o -> p.copy(x = o.x, y = o.y, rotation = (p.rotation + 1) % 4) }
+        val map = HashMap<GridPoint, GridPoint>()
+        parts.filter { it.kind != PartKind.PROBE }.forEach { p -> p.pinPositions().zip(turned(p).pinPositions()).forEach { (from, to) -> map[from] = to } }
+        wires.forEach { w -> map[w.start] = turn(w.start); map[w.end] = turn(w.end) }
+        edit { s -> s.moved(state.group, state.groupWires, map, ::turned) }
+    }
+
+    /** Copies the multi-selection beside itself and selects the copy, ready to drag into place. */
+    fun duplicateGroup() {
+        val state = _state.value
+        var schematic = state.circuit?.schematic ?: return
+        val parts = schematic.parts.filter { it.id in state.group }
+        val wires = schematic.wires.filter { it.id in state.groupWires }
+        val xs = parts.flatMap { it.bounds().let { b -> listOf(b[0], b[2]) } } + wires.flatMap { listOf(it.x1.toFloat(), it.x2.toFloat()) }
+        if (xs.isEmpty()) return
+        val dx = (xs.max() - xs.min()).toInt() + 4
+        val newParts = ArrayList<Part>()
+        val newWires = ArrayList<Wire>()
+        var id = schematic.nextId
+        for (part in parts) {
+            val ref = when (part.kind) {
+                PartKind.LABEL, PartKind.GROUND -> part.ref
+                else -> nextReference(schematic, part.def.refPrefix, part.kind)
+            }
+            val copy = part.copy(id = id++, ref = ref, x = part.x + dx)
+            newParts += copy
+            schematic = schematic.copy(parts = schematic.parts + copy)
+        }
+        wires.forEach { newWires += it.copy(id = id++, x1 = it.x1 + dx, x2 = it.x2 + dx) }
+        edit { it.copy(parts = it.parts + newParts, wires = it.wires + newWires) }
+        _state.update { it.copy(group = newParts.map { p -> p.id }.toSet(), groupWires = newWires.map { w -> w.id }.toSet()) }
+    }
+
+    fun deleteGroup() {
+        val state = _state.value
+        edit { s ->
             s.copy(
-                parts = s.parts.map { if (it.id == id) it.copy(x = it.x + dx, y = it.y + dy) else it },
-                wires = s.wires.map { w ->
-                    val a = shift(w.start)
-                    val b = shift(w.end)
-                    w.copy(x1 = a.x, y1 = a.y, x2 = b.x, y2 = b.y)
-                },
-                probes = s.probes.map { p ->
-                    val moved = shift(GridPoint(p.x, p.y))
-                    if (p.type == ProbeType.VOLTAGE) p.copy(x = moved.x, y = moved.y) else p
-                },
+                parts = s.parts.filter { it.id !in state.group },
+                wires = s.wires.filter { it.id !in state.groupWires },
+                probes = s.probes.filterNot { it.type == ProbeType.CURRENT && it.partId in state.group },
             )
         }
+        clearGroup()
     }
 
     fun rotateSelected() = updateSelected { it.copy(rotation = (it.rotation + 1) % 4) }
@@ -353,26 +473,59 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         s.copy(probes = if (existing != null) s.probes - existing else s.probes + Probe(ProbeType.CURRENT, partId = partId))
     }
 
-    fun removeProbe(probe: Probe) = edit { s -> s.copy(probes = s.probes - probe) }
+    /** Removes a probe: a probe part is deleted, a listed probe dropped. */
+    fun removeProbe(probe: Probe) {
+        val part = _state.value.circuit?.schematic?.probePart(probe)
+        if (part != null) deletePart(part.id) else edit { s -> s.copy(probes = s.probes - probe) }
+    }
 
+    /**
+     * Puts a probe on the tapped wire and shows its waveform: while live it joins the scope;
+     * otherwise its trace is added to the results, simulating first if there are none.
+     */
+    fun plotSelectedWire(defaultDialect: SpiceDialect) {
+        val state = _state.value
+        val schematic = state.circuit?.schematic ?: return
+        val wire = schematic.wires.firstOrNull { it.id == state.selectedWireId } ?: return
+        val point = state.selectedWirePoint ?: wire.start
+        val probe = schematic.parts.firstOrNull { it.kind == PartKind.PROBE && it.origin == point }
+            ?: place(PartKind.PROBE, null, point, rotation = 0, mirrored = false)
+            ?: return
+        _state.update { it.copy(selectedWireId = null, selectedPartId = probe.id, inspectWireId = null) }
+        if (!state.live) showProbeTrace(probe, defaultDialect)
+    }
+
+    private fun showProbeTrace(probe: Part, defaultDialect: SpiceDialect) {
+        val circuit = _state.value.circuit ?: return
+        val vector = Netlister.netlist(circuit, container.library.index()).probeVectors
+            .firstOrNull { it.probe == Probe(ProbeType.VOLTAGE, probe.x, probe.y) }?.vector
+        val plot = _state.value.result?.plots?.firstOrNull { p -> p.kind != PlotKind.OP && p.vectors.any { it.name.equals(vector, true) } }
+        val name = plot?.vectors?.firstOrNull { it.name.equals(vector, true) }?.name
+        if (plot != null && name != null) {
+            _state.update { it.copy(traces = it.traces + (plot.kind to it.traces[plot.kind].orEmpty() + name), resultsRequests = it.resultsRequests + 1) }
+        } else {
+            run(defaultDialect)
+        }
+    }
+
+    /**
+     * The probe tool: tapping a part's body probes its current; tapping a wire or a pin puts a
+     * measurement probe there; tapping a probe removes it.
+     */
     private fun toggleProbe(point: GridPoint, hitPart: Part?, hitWire: Wire?) {
         val schematic = _state.value.circuit?.schematic ?: return
-        val pinHit = hitPart?.pinPositions()?.firstOrNull { it == point }
-        if (hitPart != null && pinHit == null && Netlister.canProbeCurrent(hitPart)) {
-            val existing = schematic.probes.firstOrNull { it.type == ProbeType.CURRENT && it.partId == hitPart.id }
-            edit { s ->
-                s.copy(probes = if (existing != null) s.probes - existing else s.probes + Probe(ProbeType.CURRENT, partId = hitPart.id))
-            }
+        if (hitPart?.kind == PartKind.PROBE) {
+            deletePart(hitPart.id)
             return
         }
-        val target = pinHit ?: point.takeIf { hitWire != null || schematic.parts.any { p -> point in p.pinPositions() } } ?: return
-        val connectivity = Connectivity(schematic)
-        val existing = schematic.probes.firstOrNull {
-            it.type == ProbeType.VOLTAGE && connectivity.connected(GridPoint(it.x, it.y), target)
+        val pinHit = hitPart?.pinPositions()?.firstOrNull { it == point }
+        if (hitPart != null && pinHit == null && Netlister.canProbeCurrent(hitPart)) {
+            toggleCurrentProbe(hitPart.id)
+            return
         }
-        edit { s ->
-            s.copy(probes = if (existing != null) s.probes - existing else s.probes + Probe(ProbeType.VOLTAGE, target.x, target.y))
-        }
+        val target = pinHit ?: hitWire?.nearestGridPoint(point) ?: point.takeIf { schematic.parts.any { p -> point in p.pinPositions() } } ?: return
+        val existing = schematic.parts.firstOrNull { it.kind == PartKind.PROBE && it.origin == target }
+        if (existing != null) deletePart(existing.id) else place(PartKind.PROBE, null, target, rotation = 0, mirrored = false)
     }
 
     // ---- simulation ----
@@ -463,8 +616,9 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     private fun defaultTraces(result: SimulationResult, previous: Map<PlotKind, Set<String>>): Map<PlotKind, Set<String>> =
         result.plots.groupBy { it.kind }.mapValues { (kind, plots) ->
             val available = plots.flatMap { it.vectors }.map { it.name }.toSet()
-            previous[kind]?.filter { it in available }?.toSet()?.takeIf { it.isNotEmpty() }?.let { return@mapValues it }
+            // Probes are always plotted, as in LTspice; the rest keeps what was picked before.
             val probed = result.probes.map { it.vector }.filter { it in available }
+            previous[kind]?.filter { it in available }?.toSet()?.takeIf { it.isNotEmpty() }?.let { return@mapValues it + probed }
             if (probed.isNotEmpty()) return@mapValues probed.toSet()
             val vectors = plots.first().vectors.filterNot { it.isInternal }
             val voltages = vectors.filter { it.quantity == Quantity.VOLTAGE }

@@ -18,7 +18,7 @@ enum class PartKind {
     VCVS, VCCS, CCVS, CCCS, BEHAVIORAL, SWITCH,
     GROUND, LABEL,
     POT, TRANSFORMER, CRYSTAL,
-    SPST, SPDT, AMMETER, VOLTMETER,
+    SPST, SPDT, AMMETER, VOLTMETER, PROBE,
     SCHOTTKY, NJFET, PJFET,
     COMPARATOR, REGULATOR, REGULATOR_ADJ, TIMER555, OPTO,
     AND, NAND, OR, NOR, XOR, NOT, SCHMITT, DFF,
@@ -38,7 +38,7 @@ enum class PartCategory(val title: String) {
 }
 
 /** How the properties sheet edits a part's value. */
-enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS }
+enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE }
 
 data class PinDef(val name: String, val x: Int, val y: Int)
 
@@ -81,7 +81,7 @@ data class PartDef(
     val stateShapes: ((String) -> List<Shape>)? = null,
 ) {
     val hasValue: Boolean get() = editor != ValueEditor.NONE
-    val emitsSpice: Boolean get() = kind != PartKind.GROUND && kind != PartKind.LABEL
+    val emitsSpice: Boolean get() = kind != PartKind.GROUND && kind != PartKind.LABEL && kind != PartKind.PROBE
 
     /** Built-in models for this symbol. */
     val models: List<SpiceModel> get() = families.flatMap { SpiceModels.family(it) }
@@ -416,6 +416,17 @@ object PartLibrary {
             PartKind.VOLTMETER, "Voltmeter", "R", "VM", PartCategory.INTERACTIVE, "10Meg", "Input resistance",
             "Like a bench multimeter's 10 MΩ; use 1T for an ideal meter",
             twoPins, meter("V"),
+        ),
+        PartDef(
+            PartKind.PROBE, "Measurement probe", "", "PR", PartCategory.INTERACTIVE, ProbeValue.DEFAULT, "Readings",
+            "Place it on a wire: it reads the voltage there and the current along the wire",
+            listOf(PinDef("P", 0, 0)),
+            listOf(
+                line(0, 0, -0.9, -0.9),
+                Shape.Circle(-1.6f, -1.6f, 0.75f),
+                Shape.Glyph(-1.6f, -1.6f, "P", 0.8f),
+            ),
+            editor = ValueEditor.PROBE,
         ),
 
         // ---- semiconductors ----

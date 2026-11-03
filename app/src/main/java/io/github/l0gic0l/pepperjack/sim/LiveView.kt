@@ -5,6 +5,7 @@ import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.Schematic
+import io.github.l0gic0l.pepperjack.model.Wire
 import io.github.l0gic0l.pepperjack.model.pinPositions
 import io.github.l0gic0l.pepperjack.spice.Connectivity
 import io.github.l0gic0l.pepperjack.spice.NetlistResult
@@ -27,6 +28,12 @@ class LiveSegment(
 /** What a meter or LED shows, per sample. */
 class LiveReadout(val partId: Long, val kind: PartKind, val values: DoubleArray)
 
+/**
+ * What a measurement probe reads, per sample: the voltage at its tip, and the current along
+ * the wire there, positive in [direction] ("→" rightward, "↓" downward) or into the pin it sits on.
+ */
+class LiveProbe(val partId: Long, val voltage: DoubleArray?, val current: DoubleArray?, val direction: String?)
+
 /** A probed voltage or current, per sample: the live oscilloscope's channels. */
 class LiveTrace(val probe: Probe, val label: String, val quantity: Quantity, val values: DoubleArray)
 
@@ -44,7 +51,16 @@ class LiveView(
     val maxCurrent: Double,
     /** The schematic's probes, in the schematic's order; a probe whose vector is missing is left out. */
     val traces: List<LiveTrace> = emptyList(),
+    /** Readings of the measurement-probe parts. */
+    val probes: List<LiveProbe> = emptyList(),
 ) {
+    private val probeStats = HashMap<Pair<Long, Boolean>, WaveStats?>()
+
+    /** A probe's voltage (or [current]) measurements over the whole run, worked out once. */
+    fun stats(probe: LiveProbe, current: Boolean): WaveStats? = probeStats.getOrPut(probe.partId to current) {
+        (if (current) probe.current else probe.voltage)?.let { WaveStats.of(time, it) }
+    }
+
     /** Time of each sample from the start of the run, for plotting; an operating point is one sample at 0. */
     fun elapsed(sample: Int): Double = time?.let { it[sample] - it.first() } ?: 0.0
 
@@ -109,14 +125,52 @@ class LiveView(
                 }
             }
 
-            val traces = netlist.probeVectors.sortedBy { schematic.probes.indexOf(it.probe) }.mapNotNull { pv ->
+            val probes = schematic.parts.filter { it.kind == PartKind.PROBE }.map { part ->
+                val tip = part.pinPositions()[0]
+                val (current, direction) = probeCurrent(schematic, segments, tip, ::pinCurrent)
+                LiveProbe(part.id, netlist.pinNets[part.id]?.firstOrNull()?.let(::voltage), current, direction)
+            }
+
+            val order = schematic.allProbes
+            val traces = netlist.probeVectors.sortedBy { order.indexOf(it.probe) }.mapNotNull { pv ->
                 val quantity = if (pv.probe.type == ProbeType.VOLTAGE) Quantity.VOLTAGE else Quantity.CURRENT
                 series(pv.vector)?.let { LiveTrace(pv.probe, pv.label, quantity, it) }
             }
 
             val maxVoltage = segments.mapNotNull { it.voltage }.distinct().maxOfOrNull { s -> s.maxOf { abs(it) } } ?: 0.0
             val maxCurrent = segments.maxOfOrNull { s -> s.current.maxOf { abs(it) } } ?: 0.0
-            return LiveView(time, segments, readouts, maxVoltage, maxCurrent, traces)
+            return LiveView(time, segments, readouts, maxVoltage, maxCurrent, traces, probes)
+        }
+
+        /**
+         * The current at a probe's tip: along the wire it sits on (a wire split by the tip counts
+         * once), or into the pin it touches when no wire does. Null at a junction of several wires.
+         */
+        private fun probeCurrent(
+            schematic: Schematic,
+            segments: List<LiveSegment>,
+            tip: GridPoint,
+            pinCurrent: (Long, Int) -> DoubleArray?,
+        ): Pair<DoubleArray?, String?> {
+            val touching = segments.filter { s -> s.a == tip || s.b == tip || Wire(0, s.a.x, s.a.y, s.b.x, s.b.y).contains(tip) }
+            val pinAtTip = schematic.parts.any { it.kind != PartKind.PROBE && tip in it.pinPositions() }
+            // Two wire pieces meeting at the tip with nothing else there carry the same current.
+            val segment = touching.firstOrNull { it.a != tip && it.b != tip }
+                ?: touching.singleOrNull()
+                ?: touching.takeIf { it.size == 2 && !pinAtTip }?.first()
+            if (segment != null) {
+                // Report it rightward along a horizontal wire, downward along a vertical one.
+                val horizontal = segment.a.y == segment.b.y || segment.a.x != segment.b.x
+                val sign = if (horizontal) (if (segment.b.x > segment.a.x) 1.0 else -1.0) else (if (segment.b.y > segment.a.y) 1.0 else -1.0)
+                return DoubleArray(segment.current.size) { segment.current[it] * sign } to (if (horizontal) "→" else "↓")
+            }
+            if (touching.isNotEmpty()) return null to null
+            for (part in schematic.parts) {
+                if (part.kind == PartKind.PROBE) continue
+                val pin = part.pinPositions().indexOf(tip)
+                if (pin >= 0) pinCurrent(part.id, pin)?.let { return it to null }
+            }
+            return null to null
         }
 
         private fun buildSegments(

@@ -92,4 +92,19 @@ class LiveControlsTest {
         assertEquals("4.00 V p-p", meterText(MeterMode.PP, readout, view, 0.0))
         assertEquals("1.00 V", meterText(MeterMode.NOW, readout, view, 0.0))
     }
+
+    @Test
+    fun probeTagsShowTheChosenReadings() {
+        val n = 4001
+        val time = DoubleArray(n) { it * 10e-3 / (n - 1) }
+        val volts = DoubleArray(n) { sin(2 * PI * 1000 * time[it]) }
+        val stats = io.github.l0gic0l.pepperjack.sim.WaveStats.of(time, volts)
+        val all = io.github.l0gic0l.pepperjack.model.ProbeValue.parse("V I PP RMS F")
+        val lines = probeLines(all, ProbeQuantity(1.0, stats), ProbeQuantity(1.2e-3, stats?.let { null }, "→"), transient = true)
+        assertEquals("V   1.00 V  p-p 2.00 V  rms 707 mV", lines[0])
+        assertEquals("I → 1.20 mA  p-p — A  rms — A", lines[1])
+        assertEquals("f   1.00 kHz", lines[2])
+        // An operating point has no waveform: just the values.
+        assertEquals(listOf("V   5.00 V"), probeLines(all - io.github.l0gic0l.pepperjack.model.ProbeReading.CURRENT, ProbeQuantity(5.0, null), null, transient = false))
+    }
 }

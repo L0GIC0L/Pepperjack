@@ -22,6 +22,7 @@ import io.github.l0gic0l.pepperjack.ui.live.SCOPE_CURSORS
 import io.github.l0gic0l.pepperjack.ui.live.SCOPE_MEASURE
 import io.github.l0gic0l.pepperjack.ui.editor.PARTS_TRAY
 import io.github.l0gic0l.pepperjack.ui.editor.PART_TOOLBAR
+import io.github.l0gic0l.pepperjack.ui.editor.SELECTION_BAR
 import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
 import io.github.l0gic0l.pepperjack.ui.live.LIVE_SCOPE
 import org.junit.Rule
@@ -132,6 +133,28 @@ class UserFlowTest {
         rule.onNodeWithTag(SCOPE_CURSORS).performClick()
         waitWithFrames { rule.onAllNodes(hasText("at A")).fetchSemanticsNodes().isNotEmpty() }
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+    }
+
+    /** Box-select a whole example with the area tool, then delete it as one selection. */
+    @Test
+    fun boxSelectingAndDeletingTogether() {
+        rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
+        rule.onNode(hasSetTextAction()).performTextInput("voltage divider")
+        rule.waitUntilAtLeastOneExists(hasText("Voltage divider"), timeoutMillis = 5_000)
+        rule.onNodeWithText("Voltage divider").performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Select several"), timeoutMillis = 10_000)
+        rule.onNodeWithContentDescription("Select several").performClick()
+        // Corner to corner across the sheet, which the example is fitted to. The drag starts in
+        // the top-left corner, clear of the hint bar; where it ends doesn't matter.
+        rule.onNodeWithContentDescription("Schematic with", substring = true).performTouchInput {
+            down(Offset(width * 0.01f, height * 0.01f))
+            for (step in 1..12) moveTo(Offset(width * (0.01f + 0.98f * step / 12), height * (0.01f + 0.98f * step / 12)))
+            up()
+        }
+        rule.waitUntilAtLeastOneExists(hasTestTag(SELECTION_BAR), timeoutMillis = 5_000)
+        rule.onNodeWithContentDescription("Delete the selection").performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Schematic with 0 parts and 0 wires"), timeoutMillis = 5_000)
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {

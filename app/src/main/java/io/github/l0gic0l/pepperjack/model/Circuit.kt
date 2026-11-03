@@ -33,6 +33,30 @@ data class Schematic(
 ) {
     val nextId: Long
         get() = maxOf(parts.maxOfOrNull { it.id } ?: 0L, wires.maxOfOrNull { it.id } ?: 0L) + 1
+
+    /**
+     * Every probe: the measurement-probe parts (as voltage probes at their tips), then the
+     * listed ones (current probes on parts, and voltage probes from older files).
+     */
+    val allProbes: List<Probe>
+        get() = (parts.filter { it.kind == PartKind.PROBE }.map { Probe(ProbeType.VOLTAGE, it.x, it.y) } + probes).distinct()
+
+    /**
+     * The schematic with its listed voltage probes (from older files) turned into
+     * measurement-probe parts, which can be selected, moved and deleted like any part.
+     */
+    fun withProbeParts(): Schematic {
+        val voltage = probes.filter { it.type == ProbeType.VOLTAGE }
+        if (voltage.isEmpty()) return this
+        var id = nextId
+        var number = parts.filter { it.kind == PartKind.PROBE }.mapNotNull { it.ref.removePrefix("PR").toIntOrNull() }.maxOrNull() ?: 0
+        val added = voltage.map { Part(id++, PartKind.PROBE, "PR${++number}", it.x, it.y, value = ProbeValue.DEFAULT) }
+        return copy(parts = parts + added, probes = probes - voltage.toSet())
+    }
+
+    /** The measurement-probe part a voltage probe stands for, if any. */
+    fun probePart(probe: Probe): Part? =
+        if (probe.type != ProbeType.VOLTAGE) null else parts.firstOrNull { it.kind == PartKind.PROBE && it.x == probe.x && it.y == probe.y }
 }
 
 @Serializable
@@ -68,6 +92,16 @@ enum class MeterMode(val label: String, val suffix: String) {
 data class Wire(val id: Long, val x1: Int, val y1: Int, val x2: Int, val y2: Int) {
     val start: GridPoint get() = GridPoint(x1, y1)
     val end: GridPoint get() = GridPoint(x2, y2)
+
+    /** The grid point on this wire nearest [p]; a slanted wire offers only its ends. */
+    fun nearestGridPoint(p: GridPoint): GridPoint = when {
+        y1 == y2 -> GridPoint(p.x.coerceIn(minOf(x1, x2), maxOf(x1, x2)), y1)
+        x1 == x2 -> GridPoint(x1, p.y.coerceIn(minOf(y1, y2), maxOf(y1, y2)))
+        else -> {
+            fun d(q: GridPoint) = (q.x - p.x).toLong() * (q.x - p.x) + (q.y - p.y).toLong() * (q.y - p.y)
+            if (d(start) <= d(end)) start else end
+        }
+    }
 }
 
 @Serializable

@@ -74,6 +74,8 @@ import io.github.l0gic0l.pepperjack.model.PartDef
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
 import io.github.l0gic0l.pepperjack.model.PotValue
+import io.github.l0gic0l.pepperjack.model.ProbeValue
+import io.github.l0gic0l.pepperjack.model.ProbeReading
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
 import io.github.l0gic0l.pepperjack.model.SwitchValue
@@ -262,6 +264,27 @@ fun PartEditorSheet(
                     NumberField("Coupling k (0–1)", t.coupling) { value = t.copy(coupling = it.trim()).format() }
                     Text(
                         "Secondary inductance ${t.secondary()}. Each winding needs a DC path to ground.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ValueEditor.PROBE -> {
+                    val readings = ProbeValue.parse(value)
+                    Text("Readings", style = MaterialTheme.typography.titleSmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        ProbeReading.entries.forEach { r ->
+                            FilterChip(
+                                selected = r in readings,
+                                onClick = { value = ProbeValue.format(if (r in readings) readings - r else readings + r) },
+                                label = { Text(r.label) },
+                            )
+                        }
+                    }
+                    Text(
+                        "While live, the probe shows these beside it: the voltage at its tip, and the current " +
+                            "along the wire it sits on (positive to the right or downward, as its arrow shows). Peak to " +
+                            "peak, RMS, DC and frequency are over the whole run. Its voltage is also a scope channel " +
+                            "and is plotted after a run.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

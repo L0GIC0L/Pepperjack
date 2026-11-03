@@ -72,6 +72,13 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - Cursors: two time cursors, A and B, to drag or tap into place. The table
     shows each channel at A and at B and the difference, with Δt and 1/Δt,
     and the measurements then cover only the time between the cursors.
+- Measurement probes, like Multisim's: place one on a wire (from the parts
+  tray, with the probe tool, or with Plot on a tapped wire) and it shows the
+  voltage there and the current along the wire, now and as peak to peak,
+  RMS, DC and frequency over the run (pick which in its properties). The
+  current is positive to the right or downward, as its arrow shows. Each
+  probe is also a scope channel, and after a normal run its tag shows the
+  voltage measurements from the results.
 - Readings keep their place: numbers use fixed-width digits in fixed-width
   slots, so the controls don't shift as the playback time ticks.
 - Transients play back in slow motion, with pause, restart and 0.1×–4× speed;
@@ -129,10 +136,17 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   opens the full picker.
 - Tap a part for a toolbar beside it: edit, rotate, mirror, duplicate, probe
   its current, delete.
+- Select several: with the box tool, drag a box around parts and wires (or tap
+  them one by one), then drag any of them to move them all, with the wires
+  that join them to the rest stretching along. The bar above offers rotate,
+  duplicate and delete for the whole selection.
+- Tap a wire, then Plot: a probe goes on the wire and its waveform shows in
+  the results (simulating first if needed), or on the scope while live.
 - Drag or tap-tap wiring, rubber-band moves, undo/redo, junction dots and
   open-pin markers.
-- Probe tool: tap a wire for its voltage or a part for its current; probes take
-  their trace's color, as in LTspice.
+- Probe tool: tap a wire to put a measurement probe there, or a part to probe
+  its current; tap a probe to remove it. Probes take their trace's color, as
+  in LTspice, and can be moved and deleted like any part.
 - SPICE directives on the sheet (`.param`, `.model`, `.include`, `.meas`, …) and
   the generated netlist always one tab away.
 

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.ContentCut
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Flip
+import androidx.compose.material.icons.outlined.HighlightAlt
 import androidx.compose.material.icons.outlined.NearMe
 import androidx.compose.material.icons.outlined.Timeline
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -107,6 +108,7 @@ fun EditorToolbar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolButton(Icons.Outlined.NearMe, "Select and move", tool == Tool.SELECT) { onTool(Tool.SELECT) }
+            ToolButton(Icons.Outlined.HighlightAlt, "Select several", tool == Tool.AREA) { onTool(Tool.AREA) }
             ToolButton(Icons.Outlined.Timeline, "Draw wires", tool == Tool.WIRE) { onTool(Tool.WIRE) }
             WithTooltip("Add part") {
                 FilledIconButton(onClick = onParts) { Icon(Icons.Outlined.Add, contentDescription = "Add part") }
@@ -212,6 +214,27 @@ fun FloatingPartToolbar(
 }
 
 const val PART_TOOLBAR = "part-toolbar"
+
+/** An action on a [SelectionBar]. */
+class BarAction(val icon: ImageVector, val label: String, val onClick: () -> Unit)
+
+/** Context bar for a selection: what is selected, and what can be done with it. */
+@Composable
+fun SelectionBar(text: String, actions: List<BarAction>, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {
+    ContextSurface(modifier.testTag(SELECTION_BAR)) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp).widthIn(max = 200.dp),
+        )
+        actions.forEach { action -> ActionButton(action.icon, action.label, onClick = action.onClick) }
+        if (onClose != null) ActionButton(Icons.Outlined.Close, "Clear the selection", onClick = onClose)
+    }
+}
+
+const val SELECTION_BAR = "selection-bar"
 
 /** Context bar for a selected wire or a hint for the active tool. */
 @Composable

@@ -86,6 +86,11 @@ import io.github.l0gic0l.pepperjack.ui.live.LiveKnob
 import io.github.l0gic0l.pepperjack.ui.live.LiveOverlay
 import io.github.l0gic0l.pepperjack.ui.live.LiveScope
 import io.github.l0gic0l.pepperjack.ui.live.MeterModeControl
+import io.github.l0gic0l.pepperjack.ui.live.ProbeResultTags
+import androidx.compose.material.icons.automirrored.outlined.RotateRight
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import io.github.l0gic0l.pepperjack.ui.live.PotControl
 import io.github.l0gic0l.pepperjack.ui.live.ScopeHistory
 import io.github.l0gic0l.pepperjack.ui.live.ValueKnob
@@ -142,13 +147,17 @@ fun EditorScreen(
     val run = { viewModel.run(settings.dialect) }
 
     // Only runs started with the Run button jump to the results; live updates stay on the schematic.
-    LaunchedEffect(state.runCount) {
-        if (state.runCount > 0 && layout == PaneLayout.COMPACT) compactPane = Pane.RESULTS
+    LaunchedEffect(state.runCount, state.resultsRequests) {
+        if ((state.runCount > 0 || state.resultsRequests > 0) && layout == PaneLayout.COMPACT) compactPane = Pane.RESULTS
     }
-    BackHandler(enabled = state.placing != null || state.wireStart != null || state.selectedPartId != null || state.selectedWireId != null) {
+    BackHandler(
+        enabled = state.placing != null || state.wireStart != null || state.selectedPartId != null || state.selectedWireId != null ||
+            state.hasGroup,
+    ) {
         when {
             state.placing != null -> viewModel.stopPlacing()
             state.wireStart != null -> viewModel.cancelWire()
+            state.hasGroup -> viewModel.clearGroup()
             else -> viewModel.setTool(state.tool)
         }
     }
@@ -258,6 +267,8 @@ fun EditorScreen(
                     viewModel = viewModel,
                     symbols = symbols,
                     onSearchParts = { sheet = EditorSheet.PARTS },
+                    netlist = netlist,
+                    onPlotWire = { viewModel.plotSelectedWire(settings.dialect) },
                 )
             }
         }
@@ -370,6 +381,8 @@ private fun SchematicPane(
     viewModel: EditorViewModel,
     symbols: List<CustomSymbol>,
     onSearchParts: () -> Unit,
+    netlist: NetlistResult?,
+    onPlotWire: () -> Unit,
 ) {
     val liveView = state.liveView.takeIf { state.live }
     var lastAnimator by remember { mutableStateOf<LiveAnimator?>(null) }
@@ -440,9 +453,13 @@ private fun SchematicPane(
             modifier = Modifier.fillMaxSize().onGloballyPositioned { canvasCoordinates = it },
             dropGhost = dropGhost,
             onPartDragging = { draggingPart = it },
+            onSelectArea = viewModel::selectArea,
+            onMoveGroup = viewModel::moveGroup,
         )
         if (animator != null) {
-            LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize())
+            LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize(), probeColors)
+        } else {
+            ProbeResultTags(circuit.schematic, state.result, netlist, viewport, probeColors, Modifier.fillMaxSize())
         }
         val selected = state.selectedPart
         if (selected != null && state.placing == null && !draggingPart && dragIn == null) {
@@ -468,8 +485,33 @@ private fun SchematicPane(
                 onDone = viewModel::stopPlacing,
                 modifier = topBar,
             )
+            state.hasGroup -> {
+                val parts = state.group.size
+                val wires = state.groupWires.size
+                SelectionBar(
+                    listOfNotNull(
+                        "$parts part${if (parts == 1) "" else "s"}".takeIf { parts > 0 },
+                        "$wires wire${if (wires == 1) "" else "s"}".takeIf { wires > 0 },
+                    ).joinToString(", ") + " · drag to move",
+                    listOf(
+                        BarAction(Icons.AutoMirrored.Outlined.RotateRight, "Rotate the selection", viewModel::rotateGroup),
+                        BarAction(Icons.Outlined.ContentCopy, "Duplicate the selection", viewModel::duplicateGroup),
+                        BarAction(Icons.Outlined.Delete, "Delete the selection", viewModel::deleteGroup),
+                    ),
+                    topBar,
+                    onClose = viewModel::clearGroup,
+                )
+            }
             selected != null || dragIn != null -> Unit
-            state.selectedWireId != null -> HintBar("Wire selected", topBar, "Delete", viewModel::deleteSelected)
+            state.selectedWireId != null -> SelectionBar(
+                if (state.live) "Wire · tap Plot to scope it" else "Wire · tap Plot for its waveform",
+                listOf(
+                    BarAction(Icons.AutoMirrored.Outlined.ShowChart, "Plot", onPlotWire),
+                    BarAction(Icons.Outlined.Delete, "Delete", viewModel::deleteSelected),
+                ),
+                topBar,
+            )
+            state.tool == Tool.AREA -> HintBar("Drag a box around parts to select them, or tap parts one by one", topBar)
             state.tool == Tool.WIRE -> HintBar(
                 if (state.wireStart == null) "Drag to draw a wire, or tap two points" else "Tap the next point",
                 topBar,
@@ -477,7 +519,7 @@ private fun SchematicPane(
                 viewModel::cancelWire,
             )
             state.tool == Tool.PROBE -> HintBar(
-                if (state.live) "Tap a wire or a part to show it on the scope" else "Tap a wire for its voltage or a part for its current",
+                "Tap a wire to put a probe there, or a part to probe its current; tap a probe to remove it",
                 topBar,
             )
             state.tool == Tool.DELETE -> HintBar("Tap a part or wire to delete it", topBar)
@@ -531,9 +573,10 @@ private fun SchematicPane(
 private fun rememberProbeColors(circuit: Circuit, netlist: NetlistResult?, state: EditorState): Map<Probe, Color> {
     val palette = LocalCircuitColors.current.traces
     val outline = MaterialTheme.colorScheme.outline
-    return remember(circuit.schematic.probes, netlist, state.result, state.traces, palette, state.live) {
+    val probes = circuit.schematic.allProbes
+    return remember(probes, netlist, state.result, state.traces, palette, state.live) {
         // While live, the scope draws every probe, so each gets its own colour there and on the sheet.
-        if (state.live) return@remember circuit.schematic.probes.mapIndexed { i, p -> p to palette[i % palette.size] }.toMap()
+        if (state.live) return@remember probes.mapIndexed { i, p -> p to palette[i % palette.size] }.toMap()
         val probes = netlist?.probeVectors.orEmpty()
         val result = state.result
         val plot = result?.plots?.firstOrNull { it.kind != PlotKind.OP }

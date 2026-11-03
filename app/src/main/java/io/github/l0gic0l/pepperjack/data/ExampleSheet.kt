@@ -72,8 +72,11 @@ internal class Sheet {
     fun label(p: GridPoint, name: String) = label(p.x, p.y, name)
     fun ground(p: GridPoint) = ground(p.x, p.y)
 
+    private var probeCount = 0
+
+    /** A measurement probe with its tip at (x, y). */
     fun probe(x: Int, y: Int) {
-        probes += Probe(ProbeType.VOLTAGE, x, y)
+        part(PartKind.PROBE, "PR${++probeCount}", x, y)
     }
 
     fun probeCurrent(part: Part) {

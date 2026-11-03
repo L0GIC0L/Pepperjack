@@ -4,6 +4,29 @@ import io.github.l0gic0l.pepperjack.util.Si
 import java.util.Locale
 import kotlin.math.roundToInt
 
+/** What a measurement probe shows beside it. */
+enum class ProbeReading(val token: String, val label: String) {
+    VOLTAGE("V", "Voltage"),
+    CURRENT("I", "Current"),
+    PEAK_TO_PEAK("PP", "Peak to peak"),
+    RMS("RMS", "RMS"),
+    DC("DC", "DC (mean)"),
+    FREQUENCY("F", "Frequency"),
+}
+
+/** A probe's value text, "V I PP RMS": the readings it shows, in any order. */
+object ProbeValue {
+    const val DEFAULT = "V I PP RMS"
+
+    fun parse(value: String): Set<ProbeReading> {
+        val tokens = value.trim().uppercase(Locale.ROOT).split(Regex("""[\s,]+""")).toSet()
+        return ProbeReading.entries.filter { it.token in tokens }.toSet()
+    }
+
+    fun format(readings: Set<ProbeReading>): String =
+        ProbeReading.entries.filter { it in readings }.joinToString(" ") { it.token }
+}
+
 /** A potentiometer's value text, "10k 50%": total resistance and wiper position (0..1 from pin 1). */
 data class PotValue(val resistance: String, val position: Double) {
     fun format(): String = "$resistance ${(position * 100).roundToInt()}%"
