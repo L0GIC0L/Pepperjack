@@ -5,84 +5,108 @@ import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.GridPoint
-import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
-import io.github.l0gic0l.pepperjack.model.PartLibrary
-import io.github.l0gic0l.pepperjack.model.Probe
-import io.github.l0gic0l.pepperjack.model.ProbeType
-import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
-import io.github.l0gic0l.pepperjack.model.Wire
-import io.github.l0gic0l.pepperjack.model.pinPositions
 
-data class Example(val title: String, val summary: String, val build: () -> Circuit)
+enum class ExampleCategory(val title: String) {
+    BASICS("Basics"),
+    FILTERS("Filters and AC"),
+    DIODES("Diodes and rectifiers"),
+    TRANSISTORS("Transistors"),
+    OPAMPS("Op-amps"),
+    OSCILLATORS("Oscillators and timers"),
+    POWER("Power supplies"),
+    DIGITAL("Digital logic"),
+    INSTRUMENTATION("Instrumentation"),
+    NETLISTS("SPICE netlists"),
+}
+
+/** A starter circuit; [live] marks ones made for live mode (switches, knobs, meters). */
+data class Example(
+    val title: String,
+    val summary: String,
+    val category: ExampleCategory,
+    val live: Boolean = false,
+    val build: () -> Circuit,
+)
 
 /**
  * Starter circuits. Rotation 3 lays a two-terminal part left-to-right with its
  * first pin at the origin; rotation 0 runs it top-to-bottom.
  */
 object Examples {
+    private val B = ExampleCategory.BASICS
+    private val F = ExampleCategory.FILTERS
+    private val D = ExampleCategory.DIODES
+    private val T = ExampleCategory.TRANSISTORS
+    private val O = ExampleCategory.OPAMPS
+    private val X = ExampleCategory.OSCILLATORS
+    private val P = ExampleCategory.POWER
+    private val G = ExampleCategory.DIGITAL
+    private val I = ExampleCategory.INSTRUMENTATION
+    private val N = ExampleCategory.NETLISTS
+
     val all: List<Example> = listOf(
-        Example("RC low-pass filter", "AC sweep of a 1.6 kHz first-order filter") { rcFilter(ac = true) },
-        Example("RC step response", "Transient charge and discharge, τ = 1 ms") { rcFilter(ac = false) },
-        Example("Half-wave rectifier", "1N4007 with a 100 µF reservoir capacitor") { rectifier() },
-        Example("Common-emitter amplifier", "2N3904 with divider bias, gain ≈ −3") { commonEmitter() },
-        Example("Inverting op-amp", "Ideal op-amp with a gain of −10") { invertingOpAmp() },
-        Example("Op-amp clipping", "Non-inverting gain of 2 hitting ±12 V rails") { opAmpClipping() },
-        Example("Series RLC resonance", "Peaks at 5.03 kHz") { seriesRlc() },
-        Example("MOSFET LED driver", "DC sweep of a 2N7000 gate") { mosfetLed() },
-        Example("Light switch (try live mode)", "Tap the switch while live: meters, LED and current flow update") { lightSwitch() },
-        Example("Potentiometer dimmer (live)", "Turn the pot while live to dim an LED through a 2N2222") { potDimmer() },
-        Example("555 LED blinker", "NE555 astable at about 1.5 Hz; watch it in live mode") { blinker555() },
-        Example("7805 regulator", "12 V with 2 V of ripple in, a steady 5 V out") { regulator7805() },
-        Example("Half adder (logic gates)", "XOR and AND gates light the sum and carry LEDs") { halfAdder() },
-        Example("Foxboro SPEC 200 2AI-P2V (RTD to 0–10 V)", "Chopper-stabilized, transformer-isolated RTD converter, channel A") { spec200() },
-        Example("Diode I-V curve (netlist)", "Hand-written SPICE netlist with a DC sweep") { diodeNetlist() },
-        Example("Buck converter (LTspice syntax)", "Rser, .param and switch models in LTspice dialect") { buckNetlist() },
-        Example("Stepped RC filter (LTspice .step)", "Three capacitor values overlaid in one Bode plot") { steppedNetlist() },
-        Example("XSPICE limiter (Multisim style)", "Code-model A-device as used by Multisim") { xspiceNetlist() },
+        // Basics
+        Example("Light switch (try live mode)", "Tap the switch while live: meters, LED and current flow update", B, live = true) { lightSwitch() },
+        Example("Voltage divider", "9 V across 10 k and 4.7 k: 2.88 V out; turn R2's knob while live", B, live = true) { voltageDivider() },
+        Example("Kirchhoff's current law", "Three branch currents add up to the 20 mA the source supplies", B, live = true) { kirchhoff() },
+        Example("Wheatstone bridge", "Turn RV1 to 50 % while live to null the meter", B, live = true) { wheatstoneBridge() },
+        Example("RC step response", "Transient charge and discharge, τ = 1 ms", B) { rcFilter(ac = false) },
+        Example("RL step response", "Current builds up in 10 mH through 100 Ω, τ = 100 µs", B) { rlStep() },
+        // Filters and AC
+        Example("RC low-pass filter", "AC sweep of a 1.6 kHz first-order filter", F) { rcFilter(ac = true) },
+        Example("RC high-pass filter", "AC sweep of a 1.6 kHz first-order high-pass", F) { rcHighPass() },
+        Example("Series RLC resonance", "Peaks at 5.03 kHz", F) { seriesRlc() },
+        Example("Sallen-Key low-pass", "Second-order, unity gain, about 1.1 kHz, Q ≈ 0.74 (TL072)", F) { sallenKey() },
+        Example("Twin-T notch filter", "Passive notch, over 60 dB deep at 1 kHz", F) { twinTNotch() },
+        // Diodes and rectifiers
+        Example("Half-wave rectifier", "1N4007 with a 100 µF reservoir capacitor", D) { rectifier() },
+        Example("Bridge rectifier", "120 V, 60 Hz through a 10:1 transformer; meters on DC and AC", D) { bridgeRectifier() },
+        Example("Zener regulator", "1N4733A holds about 5 V; turn the source's knob while live", D, live = true) { zenerRegulator() },
+        Example("Diode clipper", "Back-to-back 1N4148s clip a 5 V sine at ±0.7 V", D) { diodeClipper() },
+        Example("Diode clamp", "A 10 V peak-to-peak sine lifted to sit above 0 V", D) { diodeClamp() },
+        Example("Voltage doubler", "Two diodes and two capacitors make about 18 V from a 10 V peak", D) { voltageDoubler() },
+        // Transistors
+        Example("Common-emitter amplifier", "2N3904 with divider bias, gain ≈ −3", T) { commonEmitter() },
+        Example("Emitter follower", "Unity-gain buffer: the output follows the 2 V p-p input", T) { emitterFollower() },
+        Example("Current mirror", "Q2 copies the 1.1 mA set by RREF; turn RL's knob while live", T, live = true) { currentMirror() },
+        Example("Differential pair", "DC sweep: the tail current steers between Q1 and Q2", T) { differentialPair() },
+        Example("Class-B push-pull output", "BD139/BD140 into 100 Ω, with crossover distortion", T) { pushPull() },
+        Example("Relay coil with flyback diode", "TIP120 switching 100 mH; D1 catches the turn-off spike", T) { flybackDiode() },
+        Example("MOSFET LED driver", "DC sweep of a 2N7000 gate", T) { mosfetLed() },
+        Example("Potentiometer dimmer (live)", "Turn the pot while live to dim an LED through a 2N2222", T, live = true) { potDimmer() },
+        // Op-amps
+        Example("Inverting op-amp", "Ideal op-amp with a gain of −10", O) { invertingOpAmp() },
+        Example("Op-amp clipping", "Non-inverting gain of 2 hitting ±12 V rails", O) { opAmpClipping() },
+        Example("Summing amplifier", "−(1 V + 0.5 V sine) from two inputs", O) { summingAmp() },
+        Example("Op-amp integrator", "A ±1 V square wave in, a ±0.25 V triangle out", O) { integrator() },
+        Example("Instrumentation amplifier", "Three op-amps, gain 21: 10 mV in, 2 V common mode rejected", O) { instrumentationAmp() },
+        Example("Schmitt trigger", "Hysteresis of ±0.9 V ignores the noise on a slow sine", O) { schmittTrigger() },
+        Example("Precision rectifier", "Rectifies 200 mV without a diode drop", O) { precisionRectifier() },
+        // Oscillators and timers
+        Example("555 LED blinker", "NE555 astable at about 1.5 Hz; watch it in live mode", X, live = true) { blinker555() },
+        Example("555 one-shot", "A trigger pulse makes one 1.1 ms output pulse", X) { monostable555() },
+        Example("Two-transistor astable", "Two LEDs take turns at about 1.7 Hz; watch it live", X, live = true) { astableMultivibrator() },
+        Example("Op-amp relaxation oscillator", "Square wave at about 450 Hz from one op-amp and an RC", X) { relaxationOscillator() },
+        Example("Wien-bridge oscillator", "1 kHz sine; diodes hold the amplitude steady", X) { wienBridge() },
+        // Power supplies
+        Example("7805 regulator", "12 V with 2 V of ripple in, a steady 5 V out", P) { regulator7805() },
+        Example("LM317 adjustable supply", "Vout = 1.25 V × (1 + RV1 / R1); turn RV1 while live", P, live = true) { lm317Supply() },
+        Example("Boost converter", "5 V to about 10 V at 100 kHz with a logic-level MOSFET", P) { boostConverter() },
+        // Digital logic
+        Example("Half adder (logic gates)", "XOR and AND gates light the sum and carry LEDs", G) { halfAdder() },
+        Example("SR latch (NAND gates)", "Set at 0 and 4 ms, reset at 2 ms; the latch holds in between", G) { srLatch() },
+        Example("Ripple counter (divide by 4)", "Two D flip-flops count clock pulses in binary", G) { rippleCounter() },
+        // Instrumentation
+        Example("4–20 mA current loop", "Set point to loop current; 1–5 V across the 250 Ω receiver", I, live = true) { currentLoop() },
+        Example("Foxboro SPEC 200 2AI-P2V (RTD to 0–10 V)", "Chopper-stabilized, transformer-isolated RTD converter, channel A", I) { spec200() },
+        // Netlists
+        Example("Diode I-V curve (netlist)", "Hand-written SPICE netlist with a DC sweep", N) { diodeNetlist() },
+        Example("Buck converter (LTspice syntax)", "Rser, .param and switch models in LTspice dialect", N) { buckNetlist() },
+        Example("Stepped RC filter (LTspice .step)", "Three capacitor values overlaid in one Bode plot", N) { steppedNetlist() },
+        Example("XSPICE limiter (Multisim style)", "Code-model A-device as used by Multisim", N) { xspiceNetlist() },
     )
-
-    private class Sheet {
-        private var nextId = 1L
-        val parts = mutableListOf<Part>()
-        val wires = mutableListOf<Wire>()
-        val probes = mutableListOf<Probe>()
-
-        fun part(kind: PartKind, ref: String, x: Int, y: Int, rotation: Int = 0, value: String? = null): Part {
-            val part = Part(nextId++, kind, ref, x, y, rotation, value = value ?: PartLibrary[kind].defaultValue)
-            parts += part
-            return part
-        }
-
-        fun ground(x: Int, y: Int) = part(PartKind.GROUND, "GND", x, y)
-        fun label(x: Int, y: Int, name: String) = part(PartKind.LABEL, name, x, y, value = name)
-        fun wire(x1: Int, y1: Int, x2: Int, y2: Int) {
-            wires += Wire(nextId++, x1, y1, x2, y2)
-        }
-
-        /** A wire through [points] in order, each leg horizontal or vertical. */
-        fun wire(vararg points: GridPoint) = points.toList().zipWithNext { a, b -> wire(a.x, a.y, b.x, b.y) }
-
-        fun label(p: GridPoint, name: String) = label(p.x, p.y, name)
-        fun ground(p: GridPoint) = ground(p.x, p.y)
-
-        fun probe(x: Int, y: Int) {
-            probes += Probe(ProbeType.VOLTAGE, x, y)
-        }
-
-        fun probeCurrent(part: Part) {
-            probes += Probe(ProbeType.CURRENT, partId = part.id)
-        }
-
-        fun circuit(name: String, analysis: AnalysisConfig, directives: String = "") = Circuit(
-            id = "",
-            name = name,
-            kind = CircuitKind.SCHEMATIC,
-            schematic = Schematic(parts.toList(), wires.toList(), directives, probes.toList()),
-            analysis = analysis,
-        )
-    }
 
     private fun rcFilter(ac: Boolean): Circuit = Sheet().run {
         part(PartKind.VOLTAGE, "V1", 0, 0, value = if (ac) "DC 0 AC 1" else "PULSE(0 5 0 1u 1u 5m 10m)")
@@ -442,7 +466,6 @@ object Examples {
      */
     private fun spec200(): Circuit = Sheet().run {
         fun p(x: Int, y: Int) = GridPoint(x, y)
-        fun Part.pin(i: Int) = pinPositions()[i]
         val h = 3 // rotation that lays a two-terminal part left to right
 
         // Field supply (output side), isolated A2/B2 supply (input side) and the chopper clock.

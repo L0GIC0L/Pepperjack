@@ -116,6 +116,10 @@ class EngineInstrumentedTest {
 
     private companion object {
         const val TAG = "PepperjackTest"
-        val drivenExamples = setOf("Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator", "Half adder (logic gates)")
+        val drivenExamples = setOf(
+            "Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator",
+            "Half adder (logic gates)", "Voltage divider", "Kirchhoff's current law", "Wheatstone bridge",
+            "Zener regulator", "Current mirror", "LM317 adjustable supply", "4–20 mA current loop",
+        )
     }
 }

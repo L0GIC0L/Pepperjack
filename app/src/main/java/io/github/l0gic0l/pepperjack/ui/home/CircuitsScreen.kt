@@ -5,6 +5,23 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.ChangeHistory
+import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ElectricalServices
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Power
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SettingsInputComponent
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Waves
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.graphics.vector.ImageVector
+import io.github.l0gic0l.pepperjack.data.ExampleCategory
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -341,6 +358,16 @@ private fun NewCircuitSheet(
     onImport: () -> Unit,
     onExample: (Int) -> Unit,
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf<ExampleCategory?>(null) }
+    var liveOnly by rememberSaveable { mutableStateOf(false) }
+    val matches = remember(query, category, liveOnly) {
+        val words = query.trim().lowercase().split(Regex("""\s+""")).filter { it.isNotEmpty() }
+        Examples.all.withIndex().filter { (_, e) ->
+            (category == null || e.category == category) && (!liveOnly || e.live) &&
+                words.all { w -> w in e.title.lowercase() || w in e.summary.lowercase() || w in e.category.title.lowercase() }
+        }
+    }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         LazyColumn(contentPadding = PaddingValues(bottom = 24.dp), modifier = Modifier.testTag(NEW_CIRCUIT_LIST)) {
             item {
@@ -357,30 +384,105 @@ private fun NewCircuitSheet(
                     modifier = Modifier.clickableRow { onBlank(CircuitKind.NETLIST) },
                 )
                 ListItem(
-                    headlineContent = { Text("Import a netlist file") },
-                    supportingContent = { Text(".cir, .net, .sp, .spice, .txt — including LTspice exports") },
+                    headlineContent = { Text("Import a file") },
+                    supportingContent = { Text("LTspice .asc schematics, or .cir, .net, .sp and .spice netlists") },
                     leadingContent = { Icon(Icons.Outlined.UploadFile, null) },
                     modifier = Modifier.clickableRow(onImport),
                 )
                 HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text(
-                    "Examples",
+                    "Examples · ${Examples.all.size}",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
-            }
-            items(Examples.all.indices.toList()) { index ->
-                val example = Examples.all[index]
-                ListItem(
-                    headlineContent = { Text(example.title) },
-                    supportingContent = { Text(example.summary) },
-                    leadingContent = { Icon(Icons.Outlined.School, null) },
-                    modifier = Modifier.clickableRow { onExample(index) },
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    placeholder = { Text("Search examples, e.g. op-amp, 555, filter") },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Clear, contentDescription = "Clear search") }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 )
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = liveOnly,
+                        onClick = { liveOnly = !liveOnly },
+                        label = { Text("Live") },
+                        leadingIcon = { Icon(Icons.Outlined.Bolt, null, Modifier.size(18.dp)) },
+                    )
+                    FilterChip(selected = category == null, onClick = { category = null }, label = { Text("All") })
+                    ExampleCategory.entries.forEach { c ->
+                        FilterChip(
+                            selected = category == c,
+                            onClick = { category = if (category == c) null else c },
+                            label = { Text(c.title) },
+                        )
+                    }
+                }
+            }
+            if (matches.isEmpty()) {
+                item {
+                    Text(
+                        "No examples match.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+            matches.groupBy { it.value.category }.forEach { (group, examples) ->
+                item(key = "header-${group.name}") {
+                    Text(
+                        group.title,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+                    )
+                }
+                items(examples, key = { it.index }) { (index, example) ->
+                    ListItem(
+                        headlineContent = { Text(example.title) },
+                        supportingContent = { Text(example.summary) },
+                        leadingContent = { Icon(example.category.icon(), null) },
+                        trailingContent = if (example.live) {
+                            {
+                                Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.tertiaryContainer) {
+                                    Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Outlined.Bolt, null, Modifier.size(14.dp))
+                                        Text("Live", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier.clickableRow { onExample(index) },
+                    )
+                }
             }
         }
     }
+}
+
+private fun ExampleCategory.icon(): ImageVector = when (this) {
+    ExampleCategory.BASICS -> Icons.Outlined.School
+    ExampleCategory.FILTERS -> Icons.Outlined.GraphicEq
+    ExampleCategory.DIODES -> Icons.Outlined.ElectricalServices
+    ExampleCategory.TRANSISTORS -> Icons.Outlined.SettingsInputComponent
+    ExampleCategory.OPAMPS -> Icons.Outlined.ChangeHistory
+    ExampleCategory.OSCILLATORS -> Icons.Outlined.Waves
+    ExampleCategory.POWER -> Icons.Outlined.Power
+    ExampleCategory.DIGITAL -> Icons.Outlined.Memory
+    ExampleCategory.INSTRUMENTATION -> Icons.Outlined.Speed
+    ExampleCategory.NETLISTS -> Icons.Outlined.Code
 }
 
 @Composable

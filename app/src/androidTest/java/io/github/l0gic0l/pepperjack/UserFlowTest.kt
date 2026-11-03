@@ -8,16 +8,18 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.printToLog
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.l0gic0l.pepperjack.ui.home.NEW_CIRCUIT_LIST
+import io.github.l0gic0l.pepperjack.ui.live.SCOPE_CURSORS
+import io.github.l0gic0l.pepperjack.ui.live.SCOPE_MEASURE
 import io.github.l0gic0l.pepperjack.ui.editor.PARTS_TRAY
 import io.github.l0gic0l.pepperjack.ui.editor.PART_TOOLBAR
 import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
@@ -45,8 +47,9 @@ class UserFlowTest {
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
         // The extended FAB's label is only in the unmerged tree; a tap on it lands on the FAB.
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
-        rule.waitUntilAtLeastOneExists(hasText("RC low-pass filter"), timeoutMillis = 10_000)
-        rule.onNodeWithText("RC low-pass filter").performScrollTo().performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("RC low-pass filter"))
+        rule.onNodeWithText("RC low-pass filter").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Run simulation"), timeoutMillis = 10_000)
         rule.onNodeWithContentDescription("Run simulation").performClick()
         rule.waitUntilAtLeastOneExists(hasText("AC Analysis"), timeoutMillis = 60_000)
@@ -55,7 +58,7 @@ class UserFlowTest {
     @Test
     fun liveModeRunsAnExample() {
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
-        rule.waitUntilAtLeastOneExists(hasText("Examples"), timeoutMillis = 10_000)
+        rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
         // The examples are a lazy list; scroll the sheet until the item is composed.
         rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Light switch (try live mode)"))
         rule.onNodeWithText("Light switch (try live mode)").performClick()
@@ -104,6 +107,30 @@ class UserFlowTest {
         rule.onNodeWithContentDescription("Live simulation").performClick()
         waitWithFrames { rule.onAllNodes(hasText("R1 1 kΩ")).fetchSemanticsNodes().isNotEmpty() }
         waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_SCOPE)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+    }
+
+    /** Search the examples, run one live, and measure it on the scope with the cursors on. */
+    @Test
+    fun scopeMeasuresBetweenCursors() {
+        rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
+        rule.onNode(hasSetTextAction()).performTextInput("step response")
+        rule.waitUntilAtLeastOneExists(hasText("RL step response"), timeoutMillis = 5_000)
+        rule.onNodeWithText("RC low-pass filter").assertDoesNotExist()
+        rule.onNodeWithText("RC step response").performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithContentDescription("Live simulation").performClick()
+        waitWithFrames { rule.onAllNodes(hasTestTag(SCOPE_MEASURE)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag(SCOPE_MEASURE).performClick()
+        waitWithFrames { rule.onAllNodes(hasText("Peak to peak")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Peak to peak").performClick()
+        waitWithFrames { rule.onAllNodes(hasText("P-P")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("Done").performClick()
+        waitWithFrames { rule.onAllNodes(hasText("Peak to peak")).fetchSemanticsNodes().isEmpty() }
+        rule.onNodeWithTag(SCOPE_CURSORS).performClick()
+        waitWithFrames { rule.onAllNodes(hasText("at A")).fetchSemanticsNodes().isNotEmpty() }
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
     }
 

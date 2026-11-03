@@ -52,7 +52,10 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   from measuring every pin, so they obey Kirchhoff's current law at every
   junction.
 - LEDs glow with their current, and ammeters and voltmeters show their
-  reading on their face. Tap a wire to read its node voltage and current.
+  reading on their face. Select a meter to switch it, like a multimeter,
+  between the reading now and its DC, AC (rms, DC removed), RMS or
+  peak-to-peak value over the run. Tap a wire to read its node voltage and
+  current.
 - Interactive parts: tap a toggle or changeover switch to flip it, and drag
   the slider of a selected potentiometer.
 - Value knobs: select a resistor, capacitor, inductor or DC source and a
@@ -63,6 +66,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   sweeps across in step with the playback, with a cursor at the time being
   shown; a DC circuit rolls along over the last ten seconds, so flipping a
   switch or turning a knob shows as a step.
+  - Measure: pick any of mean (DC), RMS, AC RMS, peak to peak, minimum,
+    maximum, frequency and period, and the scope tabulates them for every
+    channel. Mean and RMS are weighted by time, as on a bench scope.
+  - Cursors: two time cursors, A and B, to drag or tap into place. The table
+    shows each channel at A and at B and the difference, with Δt and 1/Δt,
+    and the measurements then cover only the time between the cursors.
+- Readings keep their place: numbers use fixed-width digits in fixed-width
+  slots, so the controls don't shift as the playback time ticks.
 - Transients play back in slow motion, with pause, restart and 0.1×–4× speed;
   the plots update too.
 
@@ -94,13 +105,25 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
-- Examples, from an RC filter to a full instrument: channel A of a Foxboro
-  SPEC 200 2AI-P2V RTD-to-0–10 V converter, laid out after the MI 2AI-185
-  component diagram, with a 3-wire Pt100 bridge, a JFET chopper amplifier and
-  a transformer-isolated output. Its clock and transformer are assumptions,
-  listed in its directives. As set up it reads 0.000 V at 0 °C, 5.05 V at
-  50 °C and 9.99 V at 100 °C (R80 sets zero, R77 span); change `tdeg` to set
-  the temperature.
+- 49 examples in ten categories, searchable, with the ones made for live mode
+  marked: basics (divider, Kirchhoff, Wheatstone bridge, RC and RL steps),
+  filters (RC, RLC, Sallen-Key, twin-T notch), diodes (half-wave and bridge
+  rectifiers, zener regulator, clipper, clamp, doubler), transistors
+  (common-emitter, emitter follower, current mirror, differential pair,
+  push-pull, relay driver with flyback diode), op-amps (inverting, summing,
+  integrator, instrumentation amplifier, Schmitt trigger, precision
+  rectifier), oscillators (555 astable and one-shot, two-transistor astable,
+  relaxation, Wien bridge), power (7805, LM317, boost converter), logic (half
+  adder, SR latch, ripple counter), a 4–20 mA current loop, and SPICE
+  netlists in each dialect.
+- The largest is channel A of a Foxboro SPEC 200 2AI-P2V RTD-to-0–10 V
+  converter, laid out after the MI 2AI-185 component diagram, with a 3-wire
+  Pt100 bridge, a JFET chopper amplifier and a transformer-isolated output.
+  Q11 demodulates T3's 4–6 winding onto C29, as drawn, and the span divider
+  (R76, R78 on the coarse-span jumper, R77, R101) feeds it back. Its clock
+  and transformer are assumptions, listed in its directives. As set up it
+  reads −0.002 V at 0 °C, 5.06 V at 50 °C and 9.98 V at 100 °C (R80 sets
+  zero, R77 span); change `tdeg` to set the temperature.
 - Parts tray: tap + for the parts, a category at a time, and drag one up out
   of the tray onto the sheet (or tap it, then tap where it goes). Search
   opens the full picker.
@@ -150,6 +173,9 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 
 **Results**
 - Waveforms with pinch zoom on each axis, pan, and two cursors with Δ and 1/Δ.
+- Measure on a transient: the same measurements as the scope (mean, RMS, AC
+  RMS, peak to peak, min, max, frequency, period) for every plotted trace,
+  over the run or between cursors A and B.
 - Bode plots (magnitude and phase) for AC, an operating-point table, and the
   full ngspice log.
 
