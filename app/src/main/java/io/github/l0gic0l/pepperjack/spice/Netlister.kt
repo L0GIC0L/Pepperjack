@@ -165,11 +165,16 @@ object Netlister {
             }
         }
 
+        /**
+         * The sheet's own directives come first, then the user's library, then the built-in
+         * models: a vendor model the user added replaces the built-in of the same name, as an
+         * included library does in LTspice.
+         */
         fun resolve(name: String): Resolved? {
             val key = name.uppercase(Locale.ROOT)
             directiveModels[key]?.let { return it }
-            SpiceModels.find(name)?.let { return Resolved(it.isSubckt, it.type, it.pins.size.takeIf { _ -> it.isSubckt }, it, null) }
             library[key]?.let { return Resolved(it.isSubckt, it.type, it.pins.size.takeIf { _ -> it.isSubckt }, null, it.file) }
+            SpiceModels.find(name)?.let { return Resolved(it.isSubckt, it.type, it.pins.size.takeIf { _ -> it.isSubckt }, it, null) }
             return null
         }
     }

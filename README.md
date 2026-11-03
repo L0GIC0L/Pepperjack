@@ -112,7 +112,8 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 - Model library: add vendor `.lib`, `.mod`, `.sub` files (or open them from a
   file manager), then type a model's name as a part's model. The file is
   included automatically, and the model picker lists the library models that
-  fit each symbol. Files are tidied as they are added so ngspice can include
+  fit each symbol. A library model replaces a built-in one of the same name,
+  and a `.model` on the sheet replaces both. Files are tidied as they are added so ngspice can include
   them: DOS end-of-file bytes are dropped, and stray text, test circuits and
   analyses outside subcircuits become comments, so no text is lost.
 - Online models: search about 66,000 manufacturer models by part number, maker

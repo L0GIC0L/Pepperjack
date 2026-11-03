@@ -1,5 +1,6 @@
 package io.github.l0gic0l.pepperjack.spice
 
+import io.github.l0gic0l.pepperjack.data.LibraryModel
 import io.github.l0gic0l.pepperjack.model.AnalysisConfig
 import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.Circuit
@@ -125,6 +126,15 @@ class NetlisterTest {
         assertEquals(1, text.count { it.startsWith(".model 1N4148") })
         assertFalse(text.any { it.startsWith(".ac") })
         assertTrue(".tran 1u 1m" in text)
+    }
+
+    @Test
+    fun libraryModelsReplaceBuiltInsOfTheSameName() {
+        val library = mapOf("LM358" to LibraryModel("LM358", "lm358.mod", LibraryModel.SUBCKT, listOf("1", "2", "3", "4", "5")))
+        val result = Netlister.netlist(circuit(listOf(part(PartKind.OPAMP5, "U1", 0, 0, value = "LM358"))), library)
+        val text = lines(result)
+        assertTrue(".include lm358.mod" in text)
+        assertFalse(text.any { it.startsWith(".subckt LM358", ignoreCase = true) })
     }
 
     @Test

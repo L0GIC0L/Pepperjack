@@ -86,10 +86,13 @@ class UserFlowTest {
         rule.waitUntilAtLeastOneExists(hasContentDescription("Add part"), timeoutMillis = 10_000)
         rule.onNodeWithContentDescription("Add part").performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag(PARTS_TRAY), timeoutMillis = 5_000)
-        // Up and out of the tray, onto the sheet.
+        // Straight up out of the tray to a third of the way down the sheet, whatever the screen size.
+        val sheet = rule.onNodeWithContentDescription("Schematic with", substring = true).fetchSemanticsNode().boundsInRoot
+        val tile = rule.onNodeWithContentDescription("Add Resistor").fetchSemanticsNode().boundsInRoot
+        val target = Offset(tile.center.x, sheet.top + sheet.height / 3) - tile.topLeft
         rule.onNodeWithContentDescription("Add Resistor").performTouchInput {
             down(center)
-            repeat(12) { moveBy(Offset(0f, -70f)) }
+            for (step in 1..10) moveTo(center + (target - center) * (step / 10f))
             up()
         }
         rule.waitUntilAtLeastOneExists(hasContentDescription("Schematic with 1 parts", substring = true), timeoutMillis = 5_000)

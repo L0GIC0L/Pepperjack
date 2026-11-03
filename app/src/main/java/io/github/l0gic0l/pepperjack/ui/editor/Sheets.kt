@@ -357,6 +357,7 @@ private fun ModelPicker(
         modifier = Modifier.fillMaxWidth(),
     )
     val fitting = libraryModels.filter { def.accepts(it) }
+    val fromFile = libraryModels.associateBy { it.name.uppercase() }
     // A downloaded vendor file can hold hundreds of models; list a page of those matching the field.
     val fromLibrary = if (fitting.size <= LIBRARY_PAGE) fitting else fitting.filter { it.name.contains(current, true) }.take(LIBRARY_PAGE)
     def.families.forEach { family ->
@@ -366,7 +367,10 @@ private fun ModelPicker(
         Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surfaceContainer) {
             Column {
                 models.forEach { model ->
-                    ModelRow(model.name, model.description, model.name.equals(current, true)) { onChange(model.name) }
+                    // A library model of the same name is the one a netlist uses.
+                    val replaced = fromFile[model.name.uppercase()]
+                    val description = if (replaced != null) "Replaced by the one in ${replaced.file}" else model.description
+                    ModelRow(model.name, description, model.name.equals(current, true)) { onChange(model.name) }
                 }
             }
         }
