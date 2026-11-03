@@ -94,6 +94,12 @@ object Examples {
         Example("7805 regulator", "12 V with 2 V of ripple in, a steady 5 V out", P) { regulator7805() },
         Example("LM317 adjustable supply", "Vout = 1.25 V × (1 + RV1 / R1); turn RV1 while live", P, live = true) { lm317Supply() },
         Example("Boost converter", "5 V to about 10 V at 100 kHz with a logic-level MOSFET", P) { boostConverter() },
+        Example(
+            "Triple bench power supply",
+            "One 24 V input, three isolated outputs: ±0–20 V and 0–5 V with adjustable current limit and OVP",
+            P,
+            live = true,
+        ) { triplePowerSupply() },
         // Digital logic
         Example("Half adder (logic gates)", "XOR and AND gates light the sum and carry LEDs", G) { halfAdder() },
         Example("SR latch (NAND gates)", "Set at 0 and 4 ms, reset at 2 ms; the latch holds in between", G) { srLatch() },

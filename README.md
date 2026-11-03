@@ -106,14 +106,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - JFETs (including the 2N4393 chopper), and small-signal to power MOSFETs.
   - LM358, TL072, NE5532, OPA2134, MCP6002, LM301A and LM308 op-amps.
   - LM393/LM311 comparators.
-  - 78xx/79xx, LM317/LM337 and LDO regulators.
+  - 78xx/79xx, LM317/LM337 and LDO regulators, and the TL431 reference.
   - NE555/TLC555, PC817/4N35, and crystals.
 
   Discretes use datasheet-typical parameters. ICs are behavioural
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
-- 49 examples in ten categories, searchable, with the ones made for live mode
+- 50 examples in ten categories, searchable, with the ones made for live mode
   marked: basics (divider, Kirchhoff, Wheatstone bridge, RC and RL steps),
   filters (RC, RLC, Sallen-Key, twin-T notch), diodes (half-wave and bridge
   rectifiers, zener regulator, clipper, clamp, doubler), transistors
@@ -121,9 +121,15 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   push-pull, relay driver with flyback diode), op-amps (inverting, summing,
   integrator, instrumentation amplifier, Schmitt trigger, precision
   rectifier), oscillators (555 astable and one-shot, two-transistor astable,
-  relaxation, Wien bridge), power (7805, LM317, boost converter), logic (half
+  relaxation, Wien bridge), power (7805, LM317, boost converter, a triple
+  bench supply), logic (half
   adder, SR latch, ripple counter), a 4–20 mA current loop, and SPICE
   netlists in each dialect.
+- A triple bench supply from one 24 V input: +0–20 V and −0–20 V at 0.7 A and
+  0–5 V at 1 A, each isolated by its own DC-DC module, with a knob each for
+  voltage, current limit and over-voltage trip (a latching LM393 that fires a
+  MOSFET crowbar). Built from TL431, LM358, LM393, TIP120 and other common
+  parts; try the knobs and the OVP reset buttons in live mode.
 - The largest is channel A of a Foxboro SPEC 200 2AI-P2V RTD-to-0–10 V
   converter, laid out after the MI 2AI-185 component diagram, with a 3-wire
   Pt100 bridge, a JFET chopper amplifier and a transformer-isolated output.

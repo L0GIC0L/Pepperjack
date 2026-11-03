@@ -163,14 +163,20 @@ fun DrawScope.drawPartLabels(
         else -> Unit
     }
     val ref = textMeasurer.measure(part.ref, style.copy(fontWeight = FontWeight.Medium))
-    val value = displayValue(part)?.let { textMeasurer.measure(it.take(40), style) }
+    val value = displayValue(part)?.let { textMeasurer.measure(shortValue(it), style) }
     val vertical = (bottom - top) >= (right - left)
     if (vertical) {
         val x = transform.toScreen(right + 0.4f, 0f).x
-        val cy = transform.toScreen(0f, (top + bottom) / 2f).y
+        val topY = transform.toScreen(0f, top).y
+        val bottomY = transform.toScreen(0f, bottom).y
         val totalHeight = ref.size.height + (value?.size?.height ?: 0)
-        drawText(ref, topLeft = Offset(x, cy - totalHeight / 2f))
-        value?.let { drawText(it, topLeft = Offset(x, cy - totalHeight / 2f + ref.size.height)) }
+        val centred = (topY + bottomY - totalHeight) / 2f
+        // A net label at the lower pin sits just above it, as high as a line of text. Zoomed
+        // out, the centred text would run into it, so it rises (no higher than the symbol).
+        val labelHeight = 4.dp.toPx() + ref.size.height + 1.5.dp.toPx()
+        val y = minOf(centred, bottomY - labelHeight - totalHeight).coerceAtLeast(minOf(topY, centred))
+        drawText(ref, topLeft = Offset(x, y))
+        value?.let { drawText(it, topLeft = Offset(x, y + ref.size.height)) }
     } else {
         val cx = transform.toScreen((left + right) / 2f, 0f).x
         val above = transform.toScreen(0f, top - 0.2f).y
@@ -181,6 +187,9 @@ fun DrawScope.drawPartLabels(
         }
     }
 }
+
+/** A long value (a behavioral expression, say) cut short; the part's editor shows it all. */
+internal fun shortValue(value: String, max: Int = 40): String = if (value.length <= max) value else value.take(max - 1) + "…"
 
 /** The value text shown beside a part, or null when the symbol already shows it. */
 fun displayValue(part: Part): String? = when {

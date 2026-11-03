@@ -137,6 +137,22 @@ object SpiceModels {
         add(card("1N4733", ModelFamily.ZENER, "5.1 V zener, 1 W", "D", "IS=1n N=1.5 RS=1 BV=5.1 IBV=49m CJO=200p VJ=0.75 M=0.33"))
         add(card("1N4611A", ModelFamily.ZENER, "6.6 V low-current reference zener, specified at 250 µA", "D", "IS=10p N=1.5 RS=40 BV=6.59 IBV=250u NBV=1.2 CJO=30p VJ=0.75 M=0.33"))
         add(card("1N4742", ModelFamily.ZENER, "12 V zener, 1 W", "D", "IS=1n N=1.5 RS=2 BV=12 IBV=21m CJO=80p VJ=0.75 M=0.33"))
+        // A TL431 with its REF pin tied to the cathode is a 2.495 V precision "zener"; on the
+        // zener symbol, the anode is pin 1 and the cathode pin 2.
+        add(
+            SpiceModel(
+                "TL431", ModelFamily.ZENER, "2.495 V shunt reference (TL431, REF tied to cathode), 0.2 Ω above 1 mA",
+                """
+                .subckt TL431 a k
+                * Conducts sharply above 2.495 V with a dynamic impedance of 0.2 ohm, like a TL431 in its
+                * reference mode; below that it leaks well under a microamp; reverse, it is a diode.
+                B1 k a I=5*(max(V(k,a)-2.495,0)+0.0005*ln(1+exp(-abs(V(k,a)-2.495)/0.0005)))
+                D1 a k PJTLD
+                .model PJTLD D(IS=1e-12 N=1)
+                .ends TL431
+                """.trimIndent(),
+            ),
+        )
 
         val l = ModelFamily.LED
         add(card("LED_RED", l, "Red LED, 1.9 V at 20 mA", "D", "IS=1e-20 N=1.7 RS=2.5 BV=5 IBV=10u CJO=40p"))

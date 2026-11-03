@@ -132,6 +132,7 @@ class EngineInstrumentedTest {
             "Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator",
             "Half adder (logic gates)", "Voltage divider", "Kirchhoff's current law", "Wheatstone bridge",
             "Zener regulator", "Current mirror", "LM317 adjustable supply", "4–20 mA current loop",
+            "Triple bench power supply",
         )
     }
 }
