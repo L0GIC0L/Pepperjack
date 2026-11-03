@@ -116,6 +116,13 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 **Netlists and models**
 - Syntax-highlighted netlist editor; import `.cir`, `.net`, `.sp` and LTspice
   netlist exports (View → SPICE Netlist), or open them from a file manager.
+- LTspice schematics (`.asc`) open as schematics you can edit and simulate.
+  The standard symbols map onto Pepperjack's, using the pin positions from
+  Analog Devices' LTspice reference: R, C, L, sources, diodes, BJTs,
+  MOSFETs, JFETs, controlled and behavioural sources, switches, and op-amps
+  (vendor op-amps from LTspice's Opamps folder, and UniversalOpAmp, which
+  runs on Pepperjack's generic op-amp). Wires, net labels, grounds and
+  directives come across. Other symbols are listed in a note on the sheet.
 - Model library: add vendor `.lib`, `.mod`, `.sub` files (or open them from a
   file manager), then type a model's name as a part's model. The file is
   included automatically, and the model picker lists the library models that
@@ -216,7 +223,8 @@ these repository secrets:
 
 ## Not supported yet
 
-- Opening LTspice `.asc` schematics directly (export the netlist from LTspice).
+- LTspice symbols other than those above when opening `.asc` files: vendor ICs
+  with their own pinouts and hierarchical sheets are left out and listed.
 - Nested `.step` sweeps (only the first `.step` is swept).
 - LTspice-only devices with no ngspice equivalent, and `.wave`.
 - The XSPICE `table2D`/`table3D` models (their source is GPLv2, so they are

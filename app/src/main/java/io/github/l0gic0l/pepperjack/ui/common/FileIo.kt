@@ -3,9 +3,11 @@ package io.github.l0gic0l.pepperjack.ui.common
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import io.github.l0gic0l.pepperjack.AppContainer
 import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
+import io.github.l0gic0l.pepperjack.spice.LtspiceSchematic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,16 +48,27 @@ private val modelExtensions = setOf("lib", "mod", "sub", "inc", "fam", "mdl")
 /** Whether a file opened from another app is a model library rather than a netlist. */
 fun isModelFile(name: String) = name.substringAfterLast('.', "").lowercase() in modelExtensions
 
-/** Imports a SPICE netlist file as a new circuit and returns its id. */
+/**
+ * Imports a SPICE netlist, or an LTspice schematic (.asc) as a schematic, as a new circuit
+ * and returns its id.
+ */
 suspend fun importNetlist(context: Context, container: AppContainer, uri: Uri): Result<String> = runCatching {
     val name = displayName(context, uri)
-    val text = readBytes(context, uri).toString(Charsets.UTF_8).replace("\r\n", "\n")
-    require(!name.endsWith(".asc", ignoreCase = true) && !text.startsWith("Version 4")) {
-        "LTspice schematics (.asc) can't be opened yet. In LTspice use View > SPICE Netlist and save that file instead."
-    }
+    val bytes = readBytes(context, uri)
+    val text = bytes.toString(Charsets.UTF_8).replace("\r\n", "\n")
+    if (LtspiceSchematic.looksLike(name, text)) return@runCatching importAsc(context, container, name, bytes)
     require(text.isNotBlank()) { "The file is empty." }
     val ltspice = Regex("""(?i)\b(rser|rpar|cpar)\s*=|^\s*\.(step|backanno)\b""", RegexOption.MULTILINE).containsMatchIn(text)
     val circuit = container.circuits.create(name.substringBeforeLast('.'), CircuitKind.NETLIST, text)
     val stored = if (ltspice) container.circuits.save(circuit.copy(dialect = SpiceDialect.LTSPICE)) else circuit
     stored.id
+}
+
+private suspend fun importAsc(context: Context, container: AppContainer, name: String, bytes: ByteArray): String {
+    val imported = withContext(Dispatchers.Default) { LtspiceSchematic.parse(LtspiceSchematic.decode(bytes)) }
+    require(imported.schematic.parts.isNotEmpty()) { "No parts found in this LTspice schematic." }
+    val circuit = container.circuits.create(name.substringBeforeLast('.'), CircuitKind.SCHEMATIC)
+    val stored = container.circuits.save(circuit.copy(schematic = imported.schematic, dialect = SpiceDialect.LTSPICE))
+    if (imported.warnings.isNotEmpty()) Toast.makeText(context, imported.warnings.joinToString(" "), Toast.LENGTH_LONG).show()
+    return stored.id
 }
