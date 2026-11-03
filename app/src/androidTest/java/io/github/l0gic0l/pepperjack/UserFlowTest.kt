@@ -22,7 +22,6 @@ import io.github.l0gic0l.pepperjack.ui.live.SCOPE_CURSORS
 import io.github.l0gic0l.pepperjack.ui.live.SCOPE_MEASURE
 import io.github.l0gic0l.pepperjack.ui.editor.PARTS_TRAY
 import io.github.l0gic0l.pepperjack.ui.editor.PART_TOOLBAR
-import io.github.l0gic0l.pepperjack.ui.editor.SELECTION_BAR
 import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
 import io.github.l0gic0l.pepperjack.ui.live.LIVE_SCOPE
 import org.junit.Rule
@@ -117,7 +116,9 @@ class UserFlowTest {
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
         rule.onNode(hasSetTextAction()).performTextInput("step response")
-        rule.waitUntilAtLeastOneExists(hasText("RL step response"), timeoutMillis = 5_000)
+        // The keyboard is up and the matches sit below the search box: scroll to them.
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("RL step response"))
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("RC step response"))
         rule.onNodeWithText("RC low-pass filter").assertDoesNotExist()
         rule.onNodeWithText("RC step response").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
@@ -140,8 +141,7 @@ class UserFlowTest {
     fun boxSelectingAndDeletingTogether() {
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
-        rule.onNode(hasSetTextAction()).performTextInput("voltage divider")
-        rule.waitUntilAtLeastOneExists(hasText("Voltage divider"), timeoutMillis = 5_000)
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Voltage divider"))
         rule.onNodeWithText("Voltage divider").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Select several"), timeoutMillis = 10_000)
         rule.onNodeWithContentDescription("Select several").performClick()
@@ -152,7 +152,10 @@ class UserFlowTest {
             for (step in 1..12) moveTo(Offset(width * (0.01f + 0.98f * step / 12), height * (0.01f + 0.98f * step / 12)))
             up()
         }
-        rule.waitUntilAtLeastOneExists(hasTestTag(SELECTION_BAR), timeoutMillis = 5_000)
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Delete the selection"), timeoutMillis = 5_000)
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+        // The divider has 7 parts (V1, its ground, AM1, R1, R2, the out label, VM1) and 6 wires.
+        rule.onNodeWithText("7 parts, 6 wires · drag to move").assertExists()
         rule.onNodeWithContentDescription("Delete the selection").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Schematic with 0 parts and 0 wires"), timeoutMillis = 5_000)
     }

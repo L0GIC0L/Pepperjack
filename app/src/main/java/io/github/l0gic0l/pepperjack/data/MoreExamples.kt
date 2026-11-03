@@ -304,18 +304,21 @@ internal fun emitterFollower(): Circuit = Sheet().run {
 }
 
 internal fun currentMirror(): Circuit = Sheet().run {
-    supply("VCC", 0, -8, "DC 12", "vcc")
-    part(RESISTOR, "RREF", 7, -4, value = "10k")
-    label(7, -4, "vcc")
+    supply("VCC", 0, -10, "DC 12", "vcc")
+    // Each collector is fed along a wire, so live mode shows the two currents flowing.
+    part(RESISTOR, "RREF", 7, -10, value = "10k")
+    label(7, -10, "vcc")
+    w(7, -6, 7, 0)
     part(NPN, "Q1", 8, 2, value = "2N3904", mirrored = true)
     part(NPN, "Q2", 14, 2, value = "2N3904")
     w(10, 2, 12, 2)
     w(10, 2, 10, 0, 7, 0)
     ground(7, 4)
     ground(15, 4)
-    part(RESISTOR, "RL", 15, -8, value = "2.2k")
-    label(15, -8, "vcc")
-    part(AMMETER, "AM1", 15, -4)
+    part(RESISTOR, "RL", 15, -14, value = "2.2k")
+    label(15, -14, "vcc")
+    part(AMMETER, "AM1", 15, -10)
+    w(15, -6, 15, 0)
     circuit("Current mirror", op)
 }
 
