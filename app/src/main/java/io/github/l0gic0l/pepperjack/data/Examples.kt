@@ -436,7 +436,7 @@ object Examples {
      * Channel A of a Foxboro SPEC 200 2AI-P2V, after the MI 2AI-185 component diagram. A
      * 3-wire Pt100 bridge feeds a chopper-stabilized amplifier, Q6 chopper, U6 AC amplifier,
      * Q9 demodulator and U7 integrator. Its output is chopped by Q12 into T3; one winding is
-     * demodulated by Q11 and fed back through the span divider, the other by Q10 to the U8
+     * demodulated by Q11 onto C29 and fed back through the span divider, the other by Q10 to the U8
      * output stage, so the 0–10 V output is isolated from the sensor. Clock, supplies and T3
      * are assumptions; the directives list them.
      */
@@ -541,7 +541,7 @@ object Examples {
         wire(p(99, 20), p(103, 20))
         part(PartKind.CAPACITOR, "C31", 101, 20, value = "500p").also { ground(it.pin(1)) }
         part(PartKind.TRANSFORMER, "T3", 105, 20, value = "1 1:3 0.999").also { ground(it.pin(1)); ground(it.pin(3)) }
-        part(PartKind.INDUCTOR, "L46", 107, 28, value = "9").also { label(it.pin(1), "sm") }
+        part(PartKind.INDUCTOR, "L46", 107, 28, value = "9")
         wire(p(107, 28), p(105, 28))
         part(PartKind.CAPACITOR, "C45", 105, 28, value = "500p")
         wire(p(105, 32), p(107, 32))
@@ -566,18 +566,23 @@ object Examples {
         wire(p(131, 17), p(134, 17))
         label(p(134, 17), "outa")
 
-        // Feedback side: Q11 demodulates T3's 4–6 winding, floating on the bridge's zero side;
-        // the span divider R76 / (R101 + R77) sets how much of it goes back to the chopper.
-        wire(p(107, 28), p(113, 28))
-        part(PartKind.RESISTOR, "R76", 113, 28, rotation = h, value = "20k")
+        // Feedback side, floating on the bridge's zero side (sm): Q11 closes T3's 4–6 winding onto
+        // C29 every other half cycle, so C29 holds the winding's peak. The span divider, R76 over
+        // R78 (coarse span jumper P5–P50) and R77 + R101, feeds a fraction of it back to the chopper
+        // from R77's wiper.
+        wire(p(107, 28), p(117, 28))
         part(PartKind.NJFET, "Q11", 116, 30, value = "2N4393").also { label(it.pin(2), "sm") }
         label(p(110, 30), "ck")
         part(PartKind.RESISTOR, "RG11", 110, 30, rotation = h, value = "100k")
-        wire(p(117, 28), p(121, 28))
-        label(p(121, 28), "fbx")
-        part(PartKind.RESISTOR, "R101", 121, 28, value = "205")
-        part(PartKind.POT, "R77", 121, 32, value = "1k 1.68%").also { label(it.pin(1), "sm") }
-        wire(p(123, 34), p(123, 36), p(121, 36))
+        wire(p(107, 32), p(107, 36), p(113, 36))
+        part(PartKind.CAPACITOR, "C29", 110, 36, value = "2.2u").also { label(it.pin(1), "sm") }
+        part(PartKind.RESISTOR, "R76", 113, 36, rotation = h, value = "20k")
+        part(PartKind.RESISTOR, "R78", 117, 36, value = "487").also { label(it.pin(1), "sm") }
+        wire(p(117, 36), p(121, 36))
+        part(PartKind.POT, "R77", 121, 36, value = "1k 93.3%")
+        part(PartKind.RESISTOR, "R101", 121, 40, value = "205").also { label(it.pin(1), "sm") }
+        wire(p(123, 38), p(126, 38))
+        label(p(126, 38), "fbx")
 
         probe(134, 17)
         probe(87, 20)
@@ -591,7 +596,9 @@ object Examples {
                 |*  - T3: 1 H primary (7-9), secondaries 1-3 and 4-6 at 1:3, coupling 0.999. The T3 symbol
                 |*    netlists as LT3_p (7-9) and LT3_s (1-3); L46 is the 4-6 winding.
                 |*  - The isolated common is joined to the field common, and Q11 gets gate resistor RG11.
-                |* Not modelled: the U10 lead-compensation stage and the zero/span jumpers unused for this range.
+                |*  - Coarse span jumper P5-P50 is fitted, putting R78 across the span divider.
+                |* Not modelled: the U10 lead-compensation stage and the zero/span jumpers unused for this range
+                |* (R94 and R102 are the other coarse span positions).
                 |* Calibrated for a 100-ohm platinum RTD, 0-100 C = 0-10 V: zero with R80, span with R77.
                 |* Set the RTD temperature in degrees C:
                 |.param tdeg=50
