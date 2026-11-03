@@ -9,7 +9,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
-import java.util.zip.GZIPInputStream
 
 /** A file in the online library. [path] is relative to the repository root. */
 data class OnlineFile(val path: String, val sizeBytes: Long) {
@@ -89,15 +88,19 @@ class OnlineModelIndex(val repository: String, val commit: String, val files: Li
     }
 
     companion object {
-        const val ASSET = "online-models.tsv.gz"
+        /**
+         * Plain text: the APK compresses it anyway, and the Android Gradle plugin unpacks and
+         * renames `.gz` assets, so a gzipped file is not found under its own name at run time.
+         */
+        const val ASSET = "online-models.tsv"
 
-        /** Reads the gzipped, tab-separated index that `scripts/build-model-index.py` writes. */
+        /** Reads the tab-separated index that `scripts/build-model-index.py` writes. */
         fun read(input: InputStream): OnlineModelIndex {
             var repository = ""
             var commit = ""
             val files = ArrayList<OnlineFile>()
             val models = ArrayList<OnlineModel>()
-            GZIPInputStream(input).bufferedReader().useLines { lines ->
+            input.bufferedReader().useLines { lines ->
                 for (line in lines) {
                     val f = line.split('\t')
                     when (f[0]) {

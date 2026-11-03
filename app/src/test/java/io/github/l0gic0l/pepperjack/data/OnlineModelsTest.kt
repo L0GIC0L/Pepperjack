@@ -5,11 +5,17 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 
 class OnlineModelsTest {
-    private val index by lazy { File("src/main/assets/${OnlineModelIndex.ASSET}").inputStream().use(OnlineModelIndex::read) }
+    private val indexFile = File("src/main/assets/${OnlineModelIndex.ASSET}")
+    private val index by lazy { indexFile.inputStream().use(OnlineModelIndex::read) }
+
+    /** These tests read the index from the source tree; on the emulator the device tests cover the packaged one. */
+    @Before
+    fun needsTheSourceTree() = assumeTrue("no source tree on this device", indexFile.exists())
 
     @Test
     fun bundledIndexLoads() {

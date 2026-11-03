@@ -106,7 +106,7 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   or type, and add one with a tap. They come from the community
   [KiCad-Spice-Library](https://github.com/kicad-spice-library/KiCad-Spice-Library),
   which collects files from Texas Instruments, Analog Devices, National, Maxim
-  and many other makers. The app ships only an index of names (250 kB); a file
+  and many other makers. The app ships only an index of names (330 kB); a file
   is downloaded from GitHub when you add it, with its maker's notice, and stays
   under its maker's terms. From a part's model picker, "Find more models
   online" lists only the models that fit that symbol. Every model was

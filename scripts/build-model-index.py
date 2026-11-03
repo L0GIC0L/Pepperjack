@@ -8,7 +8,7 @@ data: the app downloads a file from GitHub only when the user picks a model, so
 each file reaches the user under its maker's own license.
 
     git clone --depth 1 https://github.com/kicad-spice-library/KiCad-Spice-Library /tmp/ksl
-    scripts/build-model-index.py /tmp/ksl app/src/main/assets/online-models.tsv.gz [failing.tsv]
+    scripts/build-model-index.py /tmp/ksl app/src/main/assets/online-models.tsv [failing.tsv]
 
 To see how many of the files ngspice loads once the app has tidied them, write
 test decks with OnlineModelsTest.writeSurveyDecks (PEPPERJACK_ONLINE_LIBRARY=/tmp/ksl
@@ -17,12 +17,11 @@ and run each through `ngspice -b` with `set ngbehavior=ltpsa` in that folder's .
 List the models ngspice could not load as "<path>\t<name>" lines in failing.tsv and
 pass it as the third argument; the app marks those models.
 
-Output (gzip, tab-separated, one record per line):
+Output (plain text, tab-separated, one record per line; the APK compresses it):
     S <repository> <commit>
     F <path> <bytes>
     M <name> <type> <pins> <file number> [1 if ngspice could not load it]
 """
-import gzip
 import os
 import re
 import subprocess
@@ -109,7 +108,7 @@ def main(clone, output, failing_list=None):
             index = len(files)
             files.append((os.path.relpath(path, clone), os.path.getsize(path)))
             models.extend((model, kind, pins, index) for model, kind, pins in found.values())
-    with gzip.open(output, "wt", encoding="utf-8", compresslevel=9) as out:
+    with open(output, "w", encoding="utf-8", newline="\n") as out:
         out.write(f"S\t{REPOSITORY}\t{commit}\n")
         for path, size in files:
             out.write(f"F\t{path}\t{size}\n")

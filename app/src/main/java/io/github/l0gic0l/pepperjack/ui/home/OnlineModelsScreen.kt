@@ -130,7 +130,8 @@ fun OnlineModelsScreen(container: AppContainer, partKind: String?, onBack: () ->
     val downloading = remember { mutableStateMapOf<String, Boolean>() }
 
     LaunchedEffect(Unit) { container.library.refresh() }
-    val index by produceState<OnlineModelIndex?>(null) { value = container.onlineModels.index() }
+    val opened by produceState<Result<OnlineModelIndex>?>(null) { value = runCatching { container.onlineModels.index() } }
+    val index = opened?.getOrNull()
     val results by produceState(OnlineModelIndex.Results(emptyList(), 0), index, query, filter, fitsPart) {
         val loaded = index ?: return@produceState
         if (query.isBlank() && filter == TypeFilter.ALL && !fitsPart) {
@@ -213,7 +214,17 @@ fun OnlineModelsScreen(container: AppContainer, partKind: String?, onBack: () ->
             }
             val loaded = index
             if (loaded == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    val error = opened?.exceptionOrNull()
+                    if (error == null) {
+                        CircularProgressIndicator()
+                    } else {
+                        Text(
+                            "Couldn't open the model index: ${error.message ?: error.javaClass.simpleName}",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
                 return@Column
             }
             LazyColumn(
