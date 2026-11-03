@@ -57,6 +57,23 @@ object Si {
         return text + sep + prefix(exponent) + unit
     }
 
+    /**
+     * Like [format] but keeps trailing zeros (`1.20 V`, `0.00 V`), so a changing reading keeps
+     * its length and its digits stay put on screen. Values below a femto-unit read as zero.
+     */
+    fun formatFixed(value: Double, unit: String = "", digits: Int = 3): String {
+        val sep = if (unit.isNotEmpty()) " " else ""
+        if (value.isNaN()) return "—$sep$unit"
+        if (value.isInfinite()) return (if (value > 0) "∞" else "-∞") + sep + unit
+        if (abs(value) < 1e-15) return String.format(Locale.US, "%.${digits - 1}f", 0.0) + sep + unit
+        val rounded = BigDecimal(value).round(MathContext(digits)).toDouble()
+        val exponent = (floor(log10(abs(rounded)) / 3).toInt() * 3).coerceIn(-15, 12)
+        val scaled = rounded / Math.pow(10.0, exponent.toDouble())
+        val magnitude = floor(log10(abs(scaled))).toInt()
+        val decimals = (digits - 1 - magnitude).coerceAtLeast(0)
+        return String.format(Locale.US, "%.${decimals}f", scaled) + sep + prefix(exponent) + unit
+    }
+
     /** Formats a value for writing back into a netlist (`4.7k`, `10Meg`, `1u`). */
     fun formatSpice(value: Double): String {
         if (value == 0.0 || value.isNaN() || value.isInfinite()) return "0"

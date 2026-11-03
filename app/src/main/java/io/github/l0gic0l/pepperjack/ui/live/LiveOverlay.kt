@@ -31,9 +31,11 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import io.github.l0gic0l.pepperjack.model.MeterMode
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.transformPoint
+import io.github.l0gic0l.pepperjack.sim.LiveReadout
 import io.github.l0gic0l.pepperjack.sim.LiveView
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicViewport
 import io.github.l0gic0l.pepperjack.util.Si
@@ -231,12 +233,17 @@ private fun DrawScope.drawLive(
         }
     }
 
-    // Meters show their reading on their face, like a real one.
-    val style = TextStyle(color = palette.readoutText, fontSize = 12.dp.toSp(), fontWeight = FontWeight.Medium)
+    // Meters show their reading on their face, like a real one. Digits keep their width so a
+    // changing reading doesn't make the tag jitter.
+    val style = TextStyle(
+        color = palette.readoutText,
+        fontSize = 12.dp.toSp(),
+        fontWeight = FontWeight.Medium,
+        fontFeatureSettings = "tnum",
+    )
     view.readouts.filter { it.kind == PartKind.AMMETER || it.kind == PartKind.VOLTMETER }.forEach { readout ->
         val part = schematic.parts.firstOrNull { it.id == readout.partId } ?: return@forEach
-        val value = LiveView.sample(readout.values, position)
-        val text = Si.format(value, if (readout.kind == PartKind.AMMETER) "A" else "V")
+        val text = meterText(part.meter, readout, view, position)
         val (fx, fy) = transformPoint(0f, 2f, part.rotation, part.mirrored)
         drawTag(textMeasurer, text, style, palette, transform.toScreen(part.x + fx, part.y + fy), centered = true)
     }
@@ -246,12 +253,25 @@ private fun DrawScope.drawLive(
         val index = view.segments.indexOf(segment)
         val parts = buildList {
             segment.net?.let { net -> add(if (net == "0") "Ground" else net) }
-            segment.voltage?.let { add(Si.format(LiveView.sample(it, position), "V")) }
-            add(Si.format(abs(animator.currentAt(index)), "A"))
+            segment.voltage?.let { add(Si.formatFixed(LiveView.sample(it, position), "V")) }
+            add(Si.formatFixed(abs(animator.currentAt(index)), "A"))
         }
         val mid = transform.toScreen((segment.a.x + segment.b.x) / 2f, (segment.a.y + segment.b.y) / 2f)
         drawTag(textMeasurer, parts.joinToString("  ·  "), style, palette, mid + Offset(8.dp.toPx(), -30.dp.toPx()))
     }
+}
+
+/** A meter's reading in its [mode]: the value now, or a measurement over the whole run. */
+fun meterText(mode: MeterMode, readout: LiveReadout, view: LiveView, position: Double): String {
+    val unit = if (readout.kind == PartKind.AMMETER) "A" else "V"
+    val value = when (mode) {
+        MeterMode.NOW -> LiveView.sample(readout.values, position)
+        MeterMode.DC -> view.stats(readout)?.mean
+        MeterMode.AC -> view.stats(readout)?.acRms
+        MeterMode.RMS -> view.stats(readout)?.rms
+        MeterMode.PP -> view.stats(readout)?.peakToPeak
+    } ?: Double.NaN
+    return Si.formatFixed(value, unit) + mode.suffix
 }
 
 private fun DrawScope.drawTag(

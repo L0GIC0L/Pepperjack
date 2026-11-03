@@ -1,6 +1,26 @@
 package io.github.l0gic0l.pepperjack.ui.live
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.ArrowDropDown
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import io.github.l0gic0l.pepperjack.sim.Measure
+import io.github.l0gic0l.pepperjack.sim.WaveStats
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -122,6 +142,10 @@ fun scopeRange(low: Double, high: Double): Pair<Double, Double> {
  * is swept in step with the playback, with a cursor at the time being shown; an operating
  * point rolls along over the last ten seconds. Voltages share the left scale, currents the
  * right, so channels of one kind compare directly.
+ *
+ * Like a bench scope it measures each channel (mean, RMS, peak to peak, frequency and so on)
+ * and has two time cursors, A and B, to drag; with the cursors on, measurements cover only
+ * the time between them.
  */
 @Composable
 fun LiveScope(
@@ -132,6 +156,10 @@ fun LiveScope(
     modifier: Modifier = Modifier,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
+    var measureMask by rememberSaveable { mutableIntStateOf(0) }
+    var cursorsOn by rememberSaveable { mutableStateOf(false) }
+    var cursorA by rememberSaveable { mutableFloatStateOf(0.25f) }
+    var cursorB by rememberSaveable { mutableFloatStateOf(0.75f) }
     val view = animator?.view
     val traces = view?.traces.orEmpty()
     val rolling = view != null && view.duration == 0.0
@@ -152,6 +180,7 @@ fun LiveScope(
         }
     }
 
+    val numbers = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
     Surface(
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -175,10 +204,24 @@ fun LiveScope(
                     }
                     traces.forEach { trace ->
                         val value = if (animator != null) LiveView.sample(trace.values, animator.position) else 0.0
+                        val unit = trace.quantity.unit
                         InputChip(
                             selected = false,
                             onClick = { onRemove(trace.probe) },
-                            label = { Text("${trace.label}  ${Si.format(value, trace.quantity.unit)}") },
+                            label = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(trace.label, maxLines = 1)
+                                    Spacer(Modifier.width(6.dp))
+                                    // The reading has a fixed slot, so the chips beside it don't shift as it changes.
+                                    Text(
+                                        Si.formatFixed(value, unit),
+                                        style = numbers,
+                                        textAlign = TextAlign.End,
+                                        maxLines = 1,
+                                        modifier = Modifier.width(textWidth("-888 m$unit", numbers)),
+                                    )
+                                }
+                            },
                             leadingIcon = {
                                 Box(Modifier.size(10.dp).background(colors[trace.probe] ?: MaterialTheme.colorScheme.primary, CircleShape))
                             },
@@ -196,17 +239,240 @@ fun LiveScope(
                 }
             }
             if (expanded && animator != null && traces.isNotEmpty()) {
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(start = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MeasureMenu(measureMask) { measureMask = it }
+                    FilterChip(
+                        selected = cursorsOn,
+                        onClick = { cursorsOn = !cursorsOn },
+                        label = { Text("Cursors") },
+                        modifier = Modifier.testTag(SCOPE_CURSORS),
+                    )
+                }
+                // A transient's window is fixed; a rolling one moves on with every sample.
+                val revision = if (rolling) history.revision else 0L
+                val window = remember(view, rolling, revision) { ScopeWindow.of(animator, history, rolling) }
                 val grid = MaterialTheme.colorScheme.outlineVariant
                 val label = MaterialTheme.colorScheme.onSurfaceVariant
+                val cursorColor = MaterialTheme.colorScheme.tertiary
                 val textMeasurer = rememberTextMeasurer()
-                Canvas(Modifier.fillMaxWidth().height(120.dp).padding(bottom = 4.dp).clipToBounds()) {
+                Canvas(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .padding(bottom = 4.dp)
+                        .clipToBounds()
+                        .then(
+                            if (cursorsOn) {
+                                Modifier.pointerInput(Unit) {
+                                    var dragging = 0
+                                    fun nearest(x: Float): Int =
+                                        if (abs(x / size.width - cursorA) <= abs(x / size.width - cursorB)) 0 else 1
+                                    fun move(which: Int, x: Float) {
+                                        val f = (x / size.width).coerceIn(0f, 1f)
+                                        if (which == 0) cursorA = f else cursorB = f
+                                    }
+                                    detectDragGestures(
+                                        onDragStart = { dragging = nearest(it.x); move(dragging, it.x) },
+                                        onDrag = { change, _ -> change.consume(); move(dragging, change.position.x) },
+                                    )
+                                }.pointerInput(Unit) {
+                                    detectTapGestures { p ->
+                                        val f = (p.x / size.width).coerceIn(0f, 1f)
+                                        if (abs(f - cursorA) <= abs(f - cursorB)) cursorA = f else cursorB = f
+                                    }
+                                }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                ) {
                     animator.frame // redraw with the playback
                     history.revision
                     drawGrid(grid)
                     if (rolling) drawRolling(history, traces, colors, label, textMeasurer) else drawSweep(animator, traces, colors, label, textMeasurer)
+                    if (cursorsOn) drawCursors(cursorA, cursorB, cursorColor, textMeasurer)
+                }
+                val measures = Measure.fromMask(measureMask)
+                if (measures.isNotEmpty() || cursorsOn) {
+                    MeasurementTable(
+                        window = window,
+                        traces = traces,
+                        colors = colors,
+                        measures = measures,
+                        cursors = if (cursorsOn) cursorA to cursorB else null,
+                        style = numbers,
+                    )
                 }
             }
         }
+    }
+}
+
+const val SCOPE_CURSORS = "scope-cursors"
+const val SCOPE_MEASURE = "scope-measure"
+
+/** The time span the scope shows, in simulation seconds (a transient) or wall-clock seconds (rolling). */
+private class ScopeWindow(
+    val start: Double,
+    val length: Double,
+    val rolling: Boolean,
+    private val samples: (LiveTrace) -> Pair<DoubleArray?, DoubleArray>,
+) {
+    fun timeAt(fraction: Float): Double = start + fraction * length
+
+    /** Label for a cursor: time since the start of the run, or seconds ago when rolling. */
+    fun label(fraction: Float): String =
+        if (rolling) Si.formatFixed((fraction - 1.0) * length, "s") else Si.formatFixed(fraction * length, "s")
+
+    fun stats(trace: LiveTrace, from: Double, to: Double): WaveStats? {
+        val (times, values) = samples(trace)
+        return WaveStats.of(times, values, from, to)
+    }
+
+    fun valueAt(trace: LiveTrace, fraction: Float): Double {
+        val (times, values) = samples(trace)
+        if (times == null || times.isEmpty()) return values.firstOrNull() ?: Double.NaN
+        val t = timeAt(fraction)
+        val i = times.indexOfFirst { it >= t }
+        return when {
+            i < 0 -> values.last()
+            i == 0 -> values.first()
+            else -> {
+                val span = times[i] - times[i - 1]
+                values[i - 1] + (values[i] - values[i - 1]) * (if (span > 0) (t - times[i - 1]) / span else 0.0)
+            }
+        }
+    }
+
+    companion object {
+        fun of(animator: LiveAnimator, history: ScopeHistory, rolling: Boolean): ScopeWindow {
+            val view = animator.view
+            return if (rolling) {
+                val times = history.times.toDoubleArray()
+                ScopeWindow(history.clock - ScopeHistory.WINDOW_SECONDS, ScopeHistory.WINDOW_SECONDS, true) { trace ->
+                    times to (history.values[trace.probe]?.toDoubleArray() ?: trace.values)
+                }
+            } else {
+                ScopeWindow(view.time?.firstOrNull() ?: 0.0, view.duration, false) { trace -> view.time to trace.values }
+            }
+        }
+    }
+}
+
+/** Picks which measurements the table shows. */
+@Composable
+fun MeasureMenu(mask: Int, onMask: (Int) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = mask != 0,
+            onClick = { open = true },
+            label = { Text(if (mask == 0) "Measure" else "Measure · ${Measure.fromMask(mask).size}") },
+            trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null, Modifier.size(18.dp)) },
+            modifier = Modifier.testTag(SCOPE_MEASURE),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Measure.entries.forEach { m ->
+                val on = mask and (1 shl m.ordinal) != 0
+                DropdownMenuItem(
+                    text = { Text(m.label) },
+                    leadingIcon = { Checkbox(checked = on, onCheckedChange = null) },
+                    onClick = { onMask(Measure.toggle(mask, m)) },
+                )
+            }
+            HorizontalDivider()
+            if (mask != 0) DropdownMenuItem(text = { Text("Clear all") }, onClick = { onMask(0); open = false })
+            DropdownMenuItem(text = { Text("Done") }, onClick = { open = false })
+        }
+    }
+}
+
+/**
+ * One row per channel: the chosen measurements, then the values at cursors A and B and their
+ * difference. Columns have fixed widths and digits are tabular, so nothing moves as values change.
+ */
+@Composable
+private fun MeasurementTable(
+    window: ScopeWindow,
+    traces: List<LiveTrace>,
+    colors: Map<Probe, Color>,
+    measures: List<Measure>,
+    cursors: Pair<Float, Float>?,
+    style: TextStyle,
+) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val cell = textWidth("-888 mHz", style) + 8.dp
+    val name = textWidth("MMMMMMMM", style)
+    val (from, to) = cursors?.let { (a, b) -> window.timeAt(minOf(a, b)) to window.timeAt(maxOf(a, b)) }
+        ?: (Double.NEGATIVE_INFINITY to Double.POSITIVE_INFINITY)
+    Column(Modifier.padding(horizontal = 8.dp).padding(bottom = 6.dp)) {
+        if (cursors != null) {
+            val (a, b) = cursors
+            val dt = abs(window.timeAt(b) - window.timeAt(a))
+            Text(
+                "A ${window.label(a)}   B ${window.label(b)}   Δt ${Si.formatFixed(dt, "s")}" +
+                    if (dt > 0) "   1/Δt ${Si.formatFixed(1 / dt, "Hz")}" else "",
+                style = style,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (measures.isNotEmpty()) Text("Measured between the cursors", style = MaterialTheme.typography.labelSmall, color = muted)
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            Column {
+                // Cursor readings first: they follow the finger, so they should be in view.
+                Row {
+                    Spacer(Modifier.width(name + 14.dp))
+                    if (cursors != null) listOf("at A", "at B", "B − A").forEach { HeaderCell(it, cell, style, muted) }
+                    measures.forEach { m -> HeaderCell(m.short, cell, style, muted) }
+                }
+                traces.forEach { trace ->
+                    val unit = trace.quantity.unit
+                    // Measured once per window and cursor position, not on every playback frame.
+                    val stats = remember(window, trace, from, to, measures.isNotEmpty()) {
+                        if (measures.isNotEmpty()) window.stats(trace, from, to) else null
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).background(colors[trace.probe] ?: muted, CircleShape))
+                        Spacer(Modifier.width(6.dp))
+                        Text(trace.label, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(name))
+                        if (cursors != null) {
+                            val (va, vb) = remember(window, trace, cursors) {
+                                window.valueAt(trace, cursors.first) to window.valueAt(trace, cursors.second)
+                            }
+                            ValueCell(Si.formatFixed(va, unit), cell, style)
+                            ValueCell(Si.formatFixed(vb, unit), cell, style)
+                            ValueCell(Si.formatFixed(vb - va, unit), cell, style)
+                        }
+                        measures.forEach { m -> ValueCell(Si.formatFixed(stats?.get(m) ?: Double.NaN, m.unit(unit)), cell, style) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun HeaderCell(text: String, width: Dp, style: TextStyle, color: Color) =
+    Text(text, style = style, color = color, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(width))
+
+@Composable
+fun ValueCell(text: String, width: Dp, style: TextStyle) =
+    Text(text, style = style, textAlign = TextAlign.End, maxLines = 1, modifier = Modifier.width(width))
+
+private fun DrawScope.drawCursors(a: Float, b: Float, color: Color, textMeasurer: TextMeasurer) {
+    val style = TextStyle(color = color, fontSize = 10.dp.toSp())
+    val dash = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx()))
+    listOf("A" to a, "B" to b).forEach { (name, f) ->
+        val x = f * size.width
+        drawLine(color, Offset(x, 0f), Offset(x, size.height), 1.5.dp.toPx(), pathEffect = dash)
+        val layout = textMeasurer.measure(name, style)
+        val left = (x + 3.dp.toPx()).coerceAtMost(size.width - layout.size.width - 2.dp.toPx())
+        drawText(layout, topLeft = Offset(left, size.height / 2 - layout.size.height / 2))
     }
 }
 

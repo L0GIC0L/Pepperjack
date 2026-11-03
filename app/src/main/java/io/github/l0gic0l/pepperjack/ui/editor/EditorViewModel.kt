@@ -10,6 +10,7 @@ import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.CustomSymbol
 import io.github.l0gic0l.pepperjack.model.CustomSymbols
 import io.github.l0gic0l.pepperjack.model.GridPoint
+import io.github.l0gic0l.pepperjack.model.MeterMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
@@ -97,7 +98,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
 
     // ---- persistence ----
 
-    private fun mutate(recordUndo: Boolean, transform: (Circuit) -> Circuit) {
+    private fun mutate(recordUndo: Boolean, resimulate: Boolean = true, transform: (Circuit) -> Circuit) {
         val current = _state.value.circuit ?: return
         val next = transform(current)
         if (next == current) return
@@ -107,7 +108,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
             redoStack.clear()
         }
         _state.update { it.copy(circuit = next, canUndo = undoStack.isNotEmpty(), canRedo = redoStack.isNotEmpty()) }
-        if (_state.value.live) scheduleLive()
+        if (_state.value.live && resimulate) scheduleLive()
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             delay(500)
@@ -220,6 +221,11 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     /** Turns a part's value knob while live; the first value of a turn records one undo step. */
     fun tweakValue(id: Long, value: String, record: Boolean) = mutate(record) { c ->
         c.copy(schematic = c.schematic.copy(parts = c.schematic.parts.map { if (it.id == id) it.copy(value = value) else it }))
+    }
+
+    /** Switches a meter between reading the value now and a measurement over the run; no re-simulation needed. */
+    fun setMeterMode(id: Long, mode: MeterMode) = mutate(recordUndo = true, resimulate = false) { c ->
+        c.copy(schematic = c.schematic.copy(parts = c.schematic.parts.map { if (it.id == id) it.copy(meter = mode) else it }))
     }
 
     /** Places a part dragged in from the parts tray, and selects it. */

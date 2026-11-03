@@ -60,11 +60,17 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.l0gic0l.pepperjack.sim.Measure
 import io.github.l0gic0l.pepperjack.sim.Plot
 import io.github.l0gic0l.pepperjack.sim.PlotKind
 import io.github.l0gic0l.pepperjack.sim.Quantity
 import io.github.l0gic0l.pepperjack.sim.SimulationResult
 import io.github.l0gic0l.pepperjack.sim.Vector
+import io.github.l0gic0l.pepperjack.sim.WaveStats
+import io.github.l0gic0l.pepperjack.ui.live.HeaderCell
+import io.github.l0gic0l.pepperjack.ui.live.MeasureMenu
+import io.github.l0gic0l.pepperjack.ui.live.ValueCell
+import io.github.l0gic0l.pepperjack.ui.live.textWidth
 import io.github.l0gic0l.pepperjack.ui.theme.LocalCircuitColors
 import io.github.l0gic0l.pepperjack.util.Si
 
@@ -209,6 +215,7 @@ private fun PlotView(
     val scheme = MaterialTheme.colorScheme
     val chartColors = ChartColors(grid = scheme.outlineVariant.copy(alpha = 0.6f), axis = scheme.outline, label = scheme.onSurfaceVariant, cursor = scheme.tertiary)
     val cursors = remember(plots) { Cursors() }
+    var measureMask by rememberSaveable { mutableIntStateOf(0) }
     val window = remember(plots) { ChartWindow() }
     val phaseWindow = remember(plots) { ChartWindow() }
     val first = plots.first()
@@ -236,6 +243,7 @@ private fun PlotView(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (kind == PlotKind.TRAN && series.isNotEmpty()) MeasureMenu(measureMask) { measureMask = it }
             if (cursors.a != null || cursors.b != null) TextButton(onClick = { cursors.clear() }) { Text("Clear cursors") }
             IconButton(onClick = onExport) { Icon(Icons.Outlined.IosShare, contentDescription = "Export CSV") }
         }
@@ -267,6 +275,17 @@ private fun PlotView(
             CursorReadout(series.map { Triple(it.label, it.color, it) }.map { (label, color, s) ->
                 ReadoutRow(label, color, s.vector, xs(s.plot), kind == PlotKind.AC)
             }, cursors, xUnit)
+        }
+        val measures = Measure.fromMask(measureMask)
+        if (kind == PlotKind.TRAN && series.isNotEmpty() && measures.isNotEmpty()) {
+            val a = cursors.a
+            val b = cursors.b
+            val (from, to) = if (a != null && b != null) minOf(a, b) to maxOf(a, b) else Double.NEGATIVE_INFINITY to Double.POSITIVE_INFINITY
+            val rows = series.map { s ->
+                val stats = remember(s.vector, s.plot, from, to) { WaveStats.of(xs(s.plot), s.vector.real, from, to) }
+                StatsRow(s.label, s.color, s.vector.quantity.unit, stats)
+            }
+            StatsTable(rows, measures, betweenCursors = a != null && b != null)
         }
         if (series.size > 1) {
             FlowRow(
@@ -300,6 +319,42 @@ private fun PlotView(
                         null
                     },
                 )
+            }
+        }
+    }
+}
+
+private class StatsRow(val label: String, val color: Color, val unit: String, val stats: WaveStats?)
+
+/** The chosen measurements of each plotted trace, over the run or between cursors A and B. */
+@Composable
+private fun StatsTable(rows: List<StatsRow>, measures: List<Measure>, betweenCursors: Boolean) {
+    val style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum")
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val cell = textWidth("-888 mHz", style) + 8.dp
+    val name = textWidth("MMMMMMMMMM", style)
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).heightIn(max = 180.dp)) {
+            Text(
+                if (betweenCursors) "Measured between cursors A and B" else "Measured over the whole run (place cursors A and B to narrow it)",
+                style = MaterialTheme.typography.labelMedium,
+                color = muted,
+            )
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                Column {
+                    Row {
+                        Spacer(Modifier.width(name + 18.dp))
+                        measures.forEach { HeaderCell(it.short, cell, style, muted) }
+                    }
+                    rows.forEach { row ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(10.dp).background(row.color, CircleShape))
+                            Spacer(Modifier.width(8.dp))
+                            Text(row.label, style = style, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(name))
+                            measures.forEach { m -> ValueCell(Si.formatFixed(row.stats?.get(m) ?: Double.NaN, m.unit(row.unit)), cell, style) }
+                        }
+                    }
+                }
             }
         }
     }

@@ -1,15 +1,20 @@
 package io.github.l0gic0l.pepperjack.ui.live
 
+import io.github.l0gic0l.pepperjack.model.MeterMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
+import io.github.l0gic0l.pepperjack.sim.LiveReadout
 import io.github.l0gic0l.pepperjack.sim.LiveTrace
+import io.github.l0gic0l.pepperjack.sim.LiveView
 import io.github.l0gic0l.pepperjack.sim.Quantity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.PI
+import kotlin.math.sin
 
 class LiveControlsTest {
     private fun part(kind: PartKind, value: String) = Part(1, kind, "X1", 0, 0, value = value)
@@ -71,5 +76,20 @@ class LiveControlsTest {
         assertEquals(history.times.size, history.values.getValue(a).size)
         // Once a removed probe's readings have rolled out of the window, it is forgotten.
         assertTrue(b !in history.values)
+    }
+
+    @Test
+    fun metersReadInTheirMode() {
+        // 10 periods of 1 + 2 sin(ωt): DC 1 V, AC 1.41 V rms, RMS 1.73 V, 4 V peak to peak.
+        val n = 4001
+        val time = DoubleArray(n) { it * 10e-3 / (n - 1) }
+        val volts = DoubleArray(n) { 1 + 2 * sin(2 * PI * 1000 * time[it]) }
+        val readout = LiveReadout(7, PartKind.VOLTMETER, volts)
+        val view = LiveView(time, emptyList(), listOf(readout), 3.0, 0.0)
+        assertEquals("1.00 V dc", meterText(MeterMode.DC, readout, view, 0.0))
+        assertEquals("1.41 V ac", meterText(MeterMode.AC, readout, view, 0.0))
+        assertEquals("1.73 V rms", meterText(MeterMode.RMS, readout, view, 0.0))
+        assertEquals("4.00 V p-p", meterText(MeterMode.PP, readout, view, 0.0))
+        assertEquals("1.00 V", meterText(MeterMode.NOW, readout, view, 0.0))
     }
 }

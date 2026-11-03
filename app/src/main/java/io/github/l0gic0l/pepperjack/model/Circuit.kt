@@ -48,8 +48,20 @@ data class Part(
     val value: String = "",
     /** The symbol of a [PartKind.CUSTOM] part (a library subcircuit). */
     val symbol: CustomSymbol? = null,
+    /** What an ammeter or voltmeter reads while live simulating. */
+    val meter: MeterMode = MeterMode.NOW,
 ) {
     val origin: GridPoint get() = GridPoint(x, y)
+}
+
+/** A meter's reading: the value now, or a measurement over the whole run, like a multimeter's modes. */
+@Serializable
+enum class MeterMode(val label: String, val suffix: String) {
+    NOW("Now", ""),
+    DC("DC", " dc"),
+    AC("AC", " ac"),
+    RMS("RMS", " rms"),
+    PP("P-P", " p-p"),
 }
 
 @Serializable

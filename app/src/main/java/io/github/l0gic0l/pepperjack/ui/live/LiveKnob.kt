@@ -3,7 +3,6 @@ package io.github.l0gic0l.pepperjack.ui.live
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -118,10 +117,13 @@ fun ValueKnob(part: Part, onValue: (value: String, first: Boolean) -> Unit, modi
         modifier = modifier,
     ) {
         Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            // A fixed slot for the reading, so the slider stays under the finger as the value changes.
+            val style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum")
             Text(
                 "${part.ref} ${Si.format(value, current.unit)}",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.widthIn(min = 96.dp),
+                style = style,
+                maxLines = 1,
+                modifier = Modifier.width(textWidth("${part.ref} -888 m${current.unit}", style)),
             )
             Slider(
                 value = current.fraction(value),

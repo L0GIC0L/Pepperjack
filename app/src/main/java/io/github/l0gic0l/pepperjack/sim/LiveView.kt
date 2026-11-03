@@ -48,6 +48,11 @@ class LiveView(
     /** Time of each sample from the start of the run, for plotting; an operating point is one sample at 0. */
     fun elapsed(sample: Int): Double = time?.let { it[sample] - it.first() } ?: 0.0
 
+    private val readoutStats = HashMap<Long, WaveStats?>()
+
+    /** A meter's measurements over the whole run, worked out once. */
+    fun stats(readout: LiveReadout): WaveStats? = readoutStats.getOrPut(readout.partId) { WaveStats.of(time, readout.values) }
+
     val samples: Int get() = time?.size ?: 1
     val duration: Double get() = time?.let { if (it.isEmpty()) 0.0 else it.last() - it.first() } ?: 0.0
 

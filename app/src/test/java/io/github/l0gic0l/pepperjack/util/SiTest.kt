@@ -37,6 +37,16 @@ class SiTest {
     }
 
     @Test
+    fun fixedFormatKeepsItsLength() {
+        assertEquals("1.20 V", Si.formatFixed(1.2, "V"))
+        assertEquals("0.00 V", Si.formatFixed(0.0, "V"))
+        assertEquals("12.0 V", Si.formatFixed(12.0, "V"))
+        assertEquals("-1.20 mV", Si.formatFixed(-0.0012, "V"))
+        assertEquals("1.00 kV", Si.formatFixed(999.96, "V"))
+        assertEquals("— Hz", Si.formatFixed(Double.NaN, "Hz"))
+    }
+
+    @Test
     fun formatsForNetlists() {
         assertEquals("4.7k", Si.formatSpice(4700.0))
         assertEquals("10Meg", Si.formatSpice(1e7))
