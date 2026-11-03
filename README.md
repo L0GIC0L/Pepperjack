@@ -85,11 +85,12 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   the plots update too.
 
 **Schematic editor**
-- 45 symbols:
+- 46 symbols:
   - Passives: R, L, C, potentiometer, transformer, crystal.
   - Sources: voltage and current sources (DC, AC, sine, pulse, any SPICE
     source).
-  - Switches and meters: toggle and changeover switches, ammeter, voltmeter.
+  - Switches and meters: toggle and changeover switches, ammeter, voltmeter,
+    measurement probe.
   - Semiconductors: diode, Schottky, zener, LED, NPN, PNP, N/P JFETs, N/P
     MOSFETs.
   - ICs: ideal op-amp, op-amp, comparator, fixed and adjustable regulators,
