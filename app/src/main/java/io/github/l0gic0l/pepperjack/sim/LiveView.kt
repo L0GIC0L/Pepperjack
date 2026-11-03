@@ -2,6 +2,8 @@ package io.github.l0gic0l.pepperjack.sim
 
 import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.Probe
+import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.pinPositions
 import io.github.l0gic0l.pepperjack.spice.Connectivity
@@ -25,6 +27,9 @@ class LiveSegment(
 /** What a meter or LED shows, per sample. */
 class LiveReadout(val partId: Long, val kind: PartKind, val values: DoubleArray)
 
+/** A probed voltage or current, per sample: the live oscilloscope's channels. */
+class LiveTrace(val probe: Probe, val label: String, val quantity: Quantity, val values: DoubleArray)
+
 /**
  * The live view of one simulation: per-segment voltages and currents on the schematic's
  * wires, and meter and LED readings. Built from a live netlist, which measures the current
@@ -37,7 +42,12 @@ class LiveView(
     val readouts: List<LiveReadout>,
     val maxVoltage: Double,
     val maxCurrent: Double,
+    /** The schematic's probes, in the schematic's order; a probe whose vector is missing is left out. */
+    val traces: List<LiveTrace> = emptyList(),
 ) {
+    /** Time of each sample from the start of the run, for plotting; an operating point is one sample at 0. */
+    fun elapsed(sample: Int): Double = time?.let { it[sample] - it.first() } ?: 0.0
+
     val samples: Int get() = time?.size ?: 1
     val duration: Double get() = time?.let { if (it.isEmpty()) 0.0 else it.last() - it.first() } ?: 0.0
 
@@ -94,9 +104,14 @@ class LiveView(
                 }
             }
 
+            val traces = netlist.probeVectors.sortedBy { schematic.probes.indexOf(it.probe) }.mapNotNull { pv ->
+                val quantity = if (pv.probe.type == ProbeType.VOLTAGE) Quantity.VOLTAGE else Quantity.CURRENT
+                series(pv.vector)?.let { LiveTrace(pv.probe, pv.label, quantity, it) }
+            }
+
             val maxVoltage = segments.mapNotNull { it.voltage }.distinct().maxOfOrNull { s -> s.maxOf { abs(it) } } ?: 0.0
             val maxCurrent = segments.maxOfOrNull { s -> s.current.maxOf { abs(it) } } ?: 0.0
-            return LiveView(time, segments, readouts, maxVoltage, maxCurrent)
+            return LiveView(time, segments, readouts, maxVoltage, maxCurrent, traces)
         }
 
         private fun buildSegments(

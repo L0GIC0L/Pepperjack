@@ -217,9 +217,25 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         )
     }
 
-    private fun place(kind: PartKind, symbol: CustomSymbol?, point: GridPoint) {
-        val state = _state.value
-        val schematic = state.circuit?.schematic ?: return
+    /** Turns a part's value knob while live; the first value of a turn records one undo step. */
+    fun tweakValue(id: Long, value: String, record: Boolean) = mutate(record) { c ->
+        c.copy(schematic = c.schematic.copy(parts = c.schematic.parts.map { if (it.id == id) it.copy(value = value) else it }))
+    }
+
+    /** Places a part dragged in from the parts tray, and selects it. */
+    fun dropPart(choice: PartChoice, point: GridPoint) {
+        val part = place(choice.kind, choice.symbol, point, rotation = 0, mirrored = false) ?: return
+        if (part.kind != PartKind.LABEL) _state.update { it.copy(tool = Tool.SELECT, selectedPartId = part.id, selectedWireId = null) }
+    }
+
+    private fun place(
+        kind: PartKind,
+        symbol: CustomSymbol?,
+        point: GridPoint,
+        rotation: Int = _state.value.placingRotation,
+        mirrored: Boolean = _state.value.placingMirrored,
+    ): Part? {
+        val schematic = _state.value.circuit?.schematic ?: return null
         val def = if (symbol != null) CustomSymbols.def(symbol) else PartLibrary[kind]
         val part = Part(
             id = schematic.nextId,
@@ -227,13 +243,14 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
             ref = nextReference(schematic, def.refPrefix, kind),
             x = point.x,
             y = point.y,
-            rotation = state.placingRotation,
-            mirrored = state.placingMirrored,
+            rotation = rotation,
+            mirrored = mirrored,
             value = if (kind == PartKind.LABEL) nextLabel(schematic) else def.defaultValue,
             symbol = symbol,
         )
         edit { it.copy(parts = it.parts + part) }
         if (kind == PartKind.LABEL) _state.update { it.copy(placing = null, editingPartId = part.id, selectedPartId = part.id) }
+        return part
     }
 
     private fun nextReference(schematic: Schematic, prefix: String, kind: PartKind): String {
@@ -323,6 +340,14 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     fun updatePart(id: Long, ref: String, value: String) = edit { s ->
         s.copy(parts = s.parts.map { if (it.id == id) it.copy(ref = ref.trim().ifEmpty { it.ref }, value = value.trim()) else it })
     }
+
+    /** Adds or removes the current probe on [partId]. */
+    fun toggleCurrentProbe(partId: Long) = edit { s ->
+        val existing = s.probes.firstOrNull { it.type == ProbeType.CURRENT && it.partId == partId }
+        s.copy(probes = if (existing != null) s.probes - existing else s.probes + Probe(ProbeType.CURRENT, partId = partId))
+    }
+
+    fun removeProbe(probe: Probe) = edit { s -> s.copy(probes = s.probes - probe) }
 
     private fun toggleProbe(point: GridPoint, hitPart: Part?, hitWire: Wire?) {
         val schematic = _state.value.circuit?.schematic ?: return

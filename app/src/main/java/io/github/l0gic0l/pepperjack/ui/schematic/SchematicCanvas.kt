@@ -94,6 +94,10 @@ fun SchematicCanvas(
     onMovePart: (Long, Int, Int) -> Unit,
     onDrawWire: (GridPoint, GridPoint) -> Unit,
     modifier: Modifier = Modifier,
+    /** A part being dragged in from the parts tray, drawn where it would land. */
+    dropGhost: Part? = null,
+    /** A part drag starts (true) or ends (false). */
+    onPartDragging: (Boolean) -> Unit = {},
 ) {
     val colors = LocalCircuitColors.current
     val textMeasurer = rememberTextMeasurer()
@@ -111,6 +115,7 @@ fun SchematicCanvas(
     val dragPart by rememberUpdatedState(onDragPart)
     val movePart by rememberUpdatedState(onMovePart)
     val drawWire by rememberUpdatedState(onDrawWire)
+    val partDragging by rememberUpdatedState(onPartDragging)
 
     var dragPartId by remember { mutableStateOf<Long?>(null) }
     var dragDelta by remember { mutableStateOf(GridPoint(0, 0)) }
@@ -184,6 +189,7 @@ fun SchematicCanvas(
                         if (pressed.isEmpty()) break
                         if (pressed.size >= 2) {
                             if (mode != DragMode.TRANSFORM) {
+                                if (mode == DragMode.MOVE_PART) partDragging(false)
                                 dragPartId = null
                                 wirePreview = null
                             }
@@ -210,6 +216,7 @@ fun SchematicCanvas(
                                 if (mode == DragMode.MOVE_PART) {
                                     dragPartId = hitPart!!.id
                                     dragPart(hitPart)
+                                    partDragging(true)
                                 }
                             }
                         }
@@ -233,6 +240,7 @@ fun SchematicCanvas(
                             dragPartId?.let { movePart(it, dragDelta.x, dragDelta.y) }
                             dragPartId = null
                             dragDelta = GridPoint(0, 0)
+                            partDragging(false)
                         }
                         DragMode.WIRE -> {
                             wirePreview?.let { (a, b) -> drawWire(a, b) }
@@ -315,6 +323,7 @@ fun SchematicCanvas(
             )
             drawPart(preview, transform, colors.selection.copy(alpha = 0.6f), stroke, textMeasurer)
         }
+        dropGhost?.let { drawPart(it, transform, colors.selection.copy(alpha = 0.6f), stroke, textMeasurer) }
     }
 }
 

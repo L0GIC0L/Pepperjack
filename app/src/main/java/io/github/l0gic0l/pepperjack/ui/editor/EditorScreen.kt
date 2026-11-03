@@ -9,8 +9,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Bolt
@@ -51,8 +53,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,24 +68,33 @@ import io.github.l0gic0l.pepperjack.AppContainer
 import io.github.l0gic0l.pepperjack.data.Settings
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
+import io.github.l0gic0l.pepperjack.model.CustomSymbol
+import io.github.l0gic0l.pepperjack.model.GridPoint
+import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
 import io.github.l0gic0l.pepperjack.model.Probe
+import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.sim.Plot
 import io.github.l0gic0l.pepperjack.sim.PlotKind
 import io.github.l0gic0l.pepperjack.spice.NetlistResult
 import io.github.l0gic0l.pepperjack.spice.Netlister
 import io.github.l0gic0l.pepperjack.ui.common.writeText
-import io.github.l0gic0l.pepperjack.ui.results.ResultsPane
-import io.github.l0gic0l.pepperjack.ui.results.plotsToCsv
 import io.github.l0gic0l.pepperjack.ui.live.LiveAnimator
 import io.github.l0gic0l.pepperjack.ui.live.LiveBar
+import io.github.l0gic0l.pepperjack.ui.live.LiveKnob
 import io.github.l0gic0l.pepperjack.ui.live.LiveOverlay
+import io.github.l0gic0l.pepperjack.ui.live.LiveScope
 import io.github.l0gic0l.pepperjack.ui.live.PotControl
+import io.github.l0gic0l.pepperjack.ui.live.ScopeHistory
+import io.github.l0gic0l.pepperjack.ui.live.ValueKnob
+import io.github.l0gic0l.pepperjack.ui.results.ResultsPane
+import io.github.l0gic0l.pepperjack.ui.results.plotsToCsv
 import io.github.l0gic0l.pepperjack.ui.results.traceColor
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicCanvas
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicViewport
 import io.github.l0gic0l.pepperjack.ui.theme.LocalCircuitColors
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private enum class EditorSheet { PARTS, ANALYSIS, DIRECTIVES, RENAME }
@@ -239,7 +255,8 @@ fun EditorScreen(
                     showGrid = settings.showGrid,
                     probeColors = probeColors,
                     viewModel = viewModel,
-                    onParts = { sheet = EditorSheet.PARTS },
+                    symbols = symbols,
+                    onSearchParts = { sheet = EditorSheet.PARTS },
                 )
             }
         }
@@ -350,12 +367,63 @@ private fun SchematicPane(
     showGrid: Boolean,
     probeColors: Map<Probe, Color>,
     viewModel: EditorViewModel,
-    onParts: () -> Unit,
+    symbols: List<CustomSymbol>,
+    onSearchParts: () -> Unit,
 ) {
     val liveView = state.liveView.takeIf { state.live }
     var lastAnimator by remember { mutableStateOf<LiveAnimator?>(null) }
     val animator = remember(liveView) { liveView?.let { LiveAnimator(it, lastAnimator) } }
     LaunchedEffect(animator) { if (animator != null) lastAnimator = animator }
+    val history = remember { ScopeHistory() }
+
+    var trayOpen by rememberSaveable { mutableStateOf(false) }
+    var draggingPart by remember { mutableStateOf(false) }
+    var canvasCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var trayCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var dragIn by remember { mutableStateOf<Pair<PartChoice, Offset>?>(null) }
+    // A part dragged in from the tray sits a little above the finger, so it stays in sight.
+    val lift = with(LocalDensity.current) { 40.dp.toPx() }
+
+    fun gridAt(window: Offset): GridPoint? {
+        val canvas = canvasCoordinates?.takeIf { it.isAttached } ?: return null
+        if (trayCoordinates?.takeIf { it.isAttached }?.boundsInWindow()?.contains(window) == true) return null
+        val local = canvas.windowToLocal(window) - Offset(0f, lift)
+        if (local.x < 0 || local.y < 0 || local.x > canvas.size.width || local.y > canvas.size.height) return null
+        val g = viewport.transform.toGrid(local)
+        return GridPoint(g.x.roundToInt(), g.y.roundToInt())
+    }
+    val dragHandler = remember {
+        object : PartDragHandler {
+            override fun start(choice: PartChoice, window: Offset) {
+                viewModel.stopPlacing()
+                dragIn = choice to window
+            }
+
+            override fun move(window: Offset) {
+                dragIn = dragIn?.copy(second = window)
+            }
+
+            override fun drop(window: Offset) {
+                val choice = dragIn?.first
+                dragIn = null
+                val point = gridAt(window)
+                if (choice != null && point != null) viewModel.dropPart(choice, point)
+            }
+
+            override fun cancel() {
+                dragIn = null
+            }
+        }
+    }
+    BackHandler(enabled = trayOpen && state.placing == null && state.selectedPartId == null && state.selectedWireId == null) {
+        trayOpen = false
+    }
+    val dropGhost = dragIn?.let { (choice, window) ->
+        gridAt(window)?.let { p ->
+            Part(-1, choice.kind, "", p.x, p.y, value = choice.symbol?.params ?: PartLibrary[choice.kind].defaultValue, symbol = choice.symbol)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         SchematicCanvas(
             schematic = circuit.schematic,
@@ -368,13 +436,29 @@ private fun SchematicPane(
             onDragPart = { viewModel.select(it.id) },
             onMovePart = viewModel::movePart,
             onDrawWire = viewModel::addWire,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().onGloballyPositioned { canvasCoordinates = it },
+            dropGhost = dropGhost,
+            onPartDragging = { draggingPart = it },
         )
         if (animator != null) {
             LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize())
         }
-        val topBar = Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 12.dp, end = 12.dp)
         val selected = state.selectedPart
+        if (selected != null && state.placing == null && !draggingPart && dragIn == null) {
+            FloatingPartToolbar(
+                part = selected,
+                viewport = viewport,
+                probed = circuit.schematic.probes.any { it.type == ProbeType.CURRENT && it.partId == selected.id },
+                canProbe = Netlister.canProbeCurrent(selected),
+                onEdit = { viewModel.openEditor(selected.id) },
+                onRotate = viewModel::rotateSelected,
+                onMirror = viewModel::mirrorSelected,
+                onDuplicate = viewModel::duplicateSelected,
+                onProbe = { viewModel.toggleCurrentProbe(selected.id) },
+                onDelete = viewModel::deleteSelected,
+            )
+        }
+        val topBar = Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 12.dp, end = 12.dp)
         when {
             state.placing != null -> PlacingBar(
                 state.placingSymbol?.title ?: PartLibrary[state.placing].title,
@@ -383,15 +467,7 @@ private fun SchematicPane(
                 onDone = viewModel::stopPlacing,
                 modifier = topBar,
             )
-            selected != null -> SelectionBar(
-                selected,
-                onEdit = { viewModel.openEditor(selected.id) },
-                onRotate = viewModel::rotateSelected,
-                onMirror = viewModel::mirrorSelected,
-                onDuplicate = viewModel::duplicateSelected,
-                onDelete = viewModel::deleteSelected,
-                modifier = topBar,
-            )
+            selected != null || dragIn != null -> Unit
             state.selectedWireId != null -> HintBar("Wire selected", topBar, "Delete", viewModel::deleteSelected)
             state.tool == Tool.WIRE -> HintBar(
                 if (state.wireStart == null) "Drag to draw a wire, or tap two points" else "Tap the next point",
@@ -399,28 +475,46 @@ private fun SchematicPane(
                 if (state.wireStart != null) "Finish" else null,
                 viewModel::cancelWire,
             )
-            state.tool == Tool.PROBE -> HintBar("Tap a wire for its voltage or a part for its current", topBar)
+            state.tool == Tool.PROBE -> HintBar(
+                if (state.live) "Tap a wire or a part to show it on the scope" else "Tap a wire for its voltage or a part for its current",
+                topBar,
+            )
             state.tool == Tool.DELETE -> HintBar("Tap a part or wire to delete it", topBar)
-            state.live && circuit.schematic.parts.isNotEmpty() -> HintBar("Live: tap a switch to flip it, or a wire to read it", topBar)
-            circuit.schematic.parts.isEmpty() -> HintBar("Tap + to place your first part", topBar)
+            state.live && circuit.schematic.parts.isNotEmpty() -> HintBar("Live: flip a switch, select a part to turn its knob, or tap a wire to read it", topBar)
+            circuit.schematic.parts.isEmpty() -> HintBar("Tap + and drag a part onto the sheet", topBar)
         }
         Column(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp, start = 12.dp, end = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            val wide = Modifier.widthIn(max = 640.dp).fillMaxWidth()
             if (state.live) {
-                selected?.takeIf { it.kind == PartKind.POT }?.let { pot ->
-                    PotControl(pot, onPosition = { viewModel.setPotPosition(pot.id, it) })
+                selected?.let { part ->
+                    when {
+                        part.kind == PartKind.POT -> PotControl(part, onPosition = { viewModel.setPotPosition(part.id, it) })
+                        LiveKnob.of(part) != null -> ValueKnob(part, onValue = { value, first -> viewModel.tweakValue(part.id, value, first) })
+                    }
                 }
+                LiveScope(animator, history, probeColors, onRemove = viewModel::removeProbe, modifier = wide)
                 LiveBar(animator, state.liveRunning, state.liveError, state.liveColorMode, viewModel::setLiveColorMode)
+            }
+            if (trayOpen) {
+                PartsTray(
+                    symbols = symbols,
+                    onPick = viewModel::startPlacing,
+                    drag = dragHandler,
+                    onSearch = onSearchParts,
+                    onClose = { trayOpen = false },
+                    modifier = wide.onGloballyPositioned { trayCoordinates = it },
+                )
             }
             EditorToolbar(
                 tool = state.tool,
                 canUndo = state.canUndo,
                 canRedo = state.canRedo,
                 onTool = viewModel::setTool,
-                onParts = onParts,
+                onParts = { trayOpen = !trayOpen },
                 onUndo = viewModel::undo,
                 onRedo = viewModel::redo,
             )
@@ -433,7 +527,9 @@ private fun SchematicPane(
 private fun rememberProbeColors(circuit: Circuit, netlist: NetlistResult?, state: EditorState): Map<Probe, Color> {
     val palette = LocalCircuitColors.current.traces
     val outline = MaterialTheme.colorScheme.outline
-    return remember(circuit.schematic.probes, netlist, state.result, state.traces, palette) {
+    return remember(circuit.schematic.probes, netlist, state.result, state.traces, palette, state.live) {
+        // While live, the scope draws every probe, so each gets its own colour there and on the sheet.
+        if (state.live) return@remember circuit.schematic.probes.mapIndexed { i, p -> p to palette[i % palette.size] }.toMap()
         val probes = netlist?.probeVectors.orEmpty()
         val result = state.result
         val plot = result?.plots?.firstOrNull { it.kind != PlotKind.OP }

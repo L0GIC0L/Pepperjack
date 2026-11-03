@@ -2,6 +2,7 @@ package io.github.l0gic0l.pepperjack.ui.editor
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,9 +43,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.l0gic0l.pepperjack.model.Part
+import io.github.l0gic0l.pepperjack.model.bounds
+import io.github.l0gic0l.pepperjack.ui.schematic.SchematicViewport
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -131,32 +137,81 @@ fun PlacingBar(title: String, onRotate: () -> Unit, onMirror: () -> Unit, onDone
     }
 }
 
-/** Context bar for the selected part. */
+/**
+ * Small toolbar beside the tapped part, kept above it (or below, near the top of the sheet)
+ * as the view pans and zooms.
+ */
 @Composable
-fun SelectionBar(
+fun FloatingPartToolbar(
     part: Part,
+    viewport: SchematicViewport,
+    probed: Boolean,
+    canProbe: Boolean,
     onEdit: () -> Unit,
     onRotate: () -> Unit,
     onMirror: () -> Unit,
     onDuplicate: () -> Unit,
+    onProbe: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ContextSurface(modifier) {
-        Text(
-            listOf(part.ref, part.value).filter { it.isNotBlank() }.distinct().joinToString("  "),
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 12.dp).widthIn(max = 160.dp),
-        )
-        ActionButton(Icons.Outlined.Edit, "Edit properties", onClick = onEdit)
-        ActionButton(Icons.AutoMirrored.Outlined.RotateRight, "Rotate", onClick = onRotate)
-        ActionButton(Icons.Outlined.Flip, "Mirror", onClick = onMirror)
-        ActionButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
-        ActionButton(Icons.Outlined.Delete, "Delete", onClick = onDelete)
+    val gap = 12.dp
+    Layout(
+        modifier = modifier.fillMaxSize(),
+        content = {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                shadowElevation = 4.dp,
+                modifier = Modifier.testTag(PART_TOOLBAR),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 2.dp)) {
+                    ActionButton(Icons.Outlined.Edit, "Edit ${part.ref}", onClick = onEdit)
+                    ActionButton(Icons.AutoMirrored.Outlined.RotateRight, "Rotate", onClick = onRotate)
+                    ActionButton(Icons.Outlined.Flip, "Mirror", onClick = onMirror)
+                    ActionButton(Icons.Outlined.ContentCopy, "Duplicate", onClick = onDuplicate)
+                    if (canProbe) {
+                        WithTooltip(if (probed) "Remove the current probe" else "Probe the current") {
+                            IconToggleButton(
+                                checked = probed,
+                                onCheckedChange = { onProbe() },
+                                colors = IconButtonDefaults.iconToggleButtonColors(
+                                    checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                ),
+                            ) {
+                                Icon(Icons.AutoMirrored.Outlined.ShowChart, contentDescription = if (probed) "Remove the current probe" else "Probe the current")
+                            }
+                        }
+                    }
+                    ActionButton(Icons.Outlined.Delete, "Delete", onClick = onDelete)
+                }
+            }
+        },
+    ) { measurables, constraints ->
+        val bar = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
+        layout(constraints.maxWidth, constraints.maxHeight) {
+            val transform = viewport.transform
+            val b = part.bounds()
+            val a = transform.toScreen(b[0], b[1])
+            val c = transform.toScreen(b[2], b[3])
+            val margin = 8.dp.roundToPx()
+            val space = gap.roundToPx()
+            val top = minOf(a.y, c.y).roundToInt()
+            val bottom = maxOf(a.y, c.y).roundToInt()
+            val above = top - space - bar.height
+            val y = if (above >= margin) above else bottom + space
+            val x = ((a.x + c.x) / 2 - bar.width / 2f).roundToInt()
+            bar.place(
+                x.coerceIn(margin, maxOf(margin, constraints.maxWidth - bar.width - margin)),
+                y.coerceIn(margin, maxOf(margin, constraints.maxHeight - bar.height - margin)),
+            )
+        }
     }
 }
+
+const val PART_TOOLBAR = "part-toolbar"
 
 /** Context bar for a selected wire or a hint for the active tool. */
 @Composable

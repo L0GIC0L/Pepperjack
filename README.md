@@ -55,6 +55,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   reading on their face. Tap a wire to read its node voltage and current.
 - Interactive parts: tap a toggle or changeover switch to flip it, and drag
   the slider of a selected potentiometer.
+- Value knobs: select a resistor, capacitor, inductor or DC source and a
+  slider sweeps its value (a decade either way for R, C and L, logarithmic;
+  zero to twice the level for a source). One turn is one undo step.
+- Oscilloscope: every probe is a scope channel. Voltages share the left
+  scale and currents the right, so channels compare directly. A transient
+  sweeps across in step with the playback, with a cursor at the time being
+  shown; a DC circuit rolls along over the last ten seconds, so flipping a
+  switch or turning a knob shows as a step.
 - Transients play back in slow motion, with pause, restart and 0.1×–4× speed;
   the plots update too.
 
@@ -86,8 +94,13 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
-- Drag or tap-tap wiring, rubber-band moves, rotate, mirror, duplicate,
-  undo/redo, junction dots and open-pin markers.
+- Parts tray: tap + for the parts, a category at a time, and drag one up out
+  of the tray onto the sheet (or tap it, then tap where it goes). Search
+  opens the full picker.
+- Tap a part for a toolbar beside it: edit, rotate, mirror, duplicate, probe
+  its current, delete.
+- Drag or tap-tap wiring, rubber-band moves, undo/redo, junction dots and
+  open-pin markers.
 - Probe tool: tap a wire for its voltage or a part for its current; probes take
   their trace's color, as in LTspice.
 - SPICE directives on the sheet (`.param`, `.model`, `.include`, `.meas`, …) and

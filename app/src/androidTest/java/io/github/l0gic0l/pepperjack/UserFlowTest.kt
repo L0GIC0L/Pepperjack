@@ -1,5 +1,6 @@
 package io.github.l0gic0l.pepperjack
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
@@ -13,10 +14,14 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.printToLog
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.l0gic0l.pepperjack.ui.home.NEW_CIRCUIT_LIST
+import io.github.l0gic0l.pepperjack.ui.editor.PARTS_TRAY
+import io.github.l0gic0l.pepperjack.ui.editor.PART_TOOLBAR
 import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
+import io.github.l0gic0l.pepperjack.ui.live.LIVE_SCOPE
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -70,6 +75,33 @@ class UserFlowTest {
         rule.waitUntilAtLeastOneExists(hasTestTag(ONLINE_SEARCH), timeoutMillis = 10_000)
         rule.onNodeWithTag(ONLINE_SEARCH).performTextInput("LM358")
         rule.waitUntilAtLeastOneExists(hasText("Texas Instruments/lm358.mod", substring = true), timeoutMillis = 30_000)
+    }
+
+    /** The touch flow: drag a part in from the tray, use its toolbar, then turn its knob live. */
+    @Test
+    fun draggingAPartInThenTurningItsKnob() {
+        rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
+        rule.waitUntilAtLeastOneExists(hasText("Blank schematic"), timeoutMillis = 10_000)
+        rule.onNodeWithText("Blank schematic").performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Add part"), timeoutMillis = 10_000)
+        rule.onNodeWithContentDescription("Add part").performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag(PARTS_TRAY), timeoutMillis = 5_000)
+        // Up and out of the tray, onto the sheet.
+        rule.onNodeWithContentDescription("Add Resistor").performTouchInput {
+            down(center)
+            repeat(12) { moveBy(Offset(0f, -70f)) }
+            up()
+        }
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Schematic with 1 parts", substring = true), timeoutMillis = 5_000)
+        rule.onNodeWithTag(PART_TOOLBAR).assertExists()
+        rule.onNodeWithContentDescription("Rotate").performClick()
+
+        // Live: the selected resistor gets a knob, and the scope asks for a probe.
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithContentDescription("Live simulation").performClick()
+        waitWithFrames { rule.onAllNodes(hasText("R1 1 kΩ")).fetchSemanticsNodes().isNotEmpty() }
+        waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_SCOPE)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {

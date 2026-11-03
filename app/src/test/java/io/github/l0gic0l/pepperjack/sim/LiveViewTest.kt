@@ -7,6 +7,8 @@ import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.Probe
+import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.Wire
 import io.github.l0gic0l.pepperjack.spice.Netlister
@@ -56,6 +58,28 @@ class LiveViewTest {
         assertEquals(0.0, view.segments.first { it.wireId == 13L }.voltage!![0], 0.0)
         assertEquals(1e-3, view.maxCurrent, 1e-12)
         assertEquals(3.0, view.maxVoltage, 0.0)
+    }
+
+    @Test
+    fun probesBecomeScopeTraces() {
+        val probed = circuit.copy(
+            schematic = schematic.copy(probes = listOf(Probe(ProbeType.VOLTAGE, 4, -2), Probe(ProbeType.CURRENT, partId = 3))),
+        )
+        val netlist = Netlister.netlist(probed, live = true)
+        val samples = 3
+        val currentProbe = netlist.probeVectors.first { it.probe.type == ProbeType.CURRENT }.vector
+        val vectors = (netlist.pinCurrents.values.flatten() + netlist.probeVectors.map { it.vector } + netlist.pinNets.values.flatten())
+            .distinct().filter { it != "0" }
+            .map { name -> Vector(name.lowercase(), Quantity.VOLTAGE, DoubleArray(samples) { it + if (name == currentProbe) 10.0 else 0.0 }) }
+        val time = Vector("time", Quantity.TIME, doubleArrayOf(0.0, 1e-3, 2e-3))
+        val result = SimulationResult(listOf(Plot("tran1", "Transient", PlotKind.TRAN, time, vectors)), emptyList(), emptyList(), null)
+
+        val view = checkNotNull(LiveView.build(probed.schematic, netlist, result))
+        assertEquals(listOf(ProbeType.VOLTAGE, ProbeType.CURRENT), view.traces.map { it.probe.type })
+        assertEquals(listOf(Quantity.VOLTAGE, Quantity.CURRENT), view.traces.map { it.quantity })
+        assertEquals("I(R2)", view.traces[1].label)
+        assertEquals(12.0, view.traces[1].values[2], 0.0)
+        assertEquals(2e-3, view.elapsed(2), 1e-15)
     }
 
     @Test
