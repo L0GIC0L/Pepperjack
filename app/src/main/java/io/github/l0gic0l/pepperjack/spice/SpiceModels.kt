@@ -100,6 +100,7 @@ object SpiceModels {
     private fun discretes(): List<SpiceModel> = buildList {
         val d = ModelFamily.DIODE
         add(card("1N4148", d, "Fast signal diode, 100 V, 200 mA, 4 ns", "D", "IS=4.352n N=1.906 RS=0.6458 BV=110 IBV=100u CJO=0.7048p VJ=0.869 M=0.03 FC=0.5 TT=3.48n"))
+        add(card("FD333", d, "Low-leakage signal diode, picoamp reverse current", "D", "IS=10f N=1 RS=5 BV=125 IBV=1n CJO=3p VJ=0.7 M=0.3 TT=10n"))
         add(card("1N914", d, "Fast signal diode, 100 V, 200 mA", "D", "IS=2.52n N=1.752 RS=0.568 BV=100 IBV=100u CJO=4p VJ=0.75 M=0.4 TT=20n"))
         add(card("1N4001", d, "Rectifier, 50 V, 1 A", "D", "IS=7.02767n N=1.80803 RS=34.15m EG=1.05743 XTI=5 BV=50 IBV=5u CJO=10p VJ=0.7 M=0.5 FC=0.5 TT=100n"))
         add(card("1N4007", d, "Rectifier, 1000 V, 1 A", "D", "IS=7.02767n N=1.80803 RS=34.15m EG=1.05743 XTI=5 BV=1000 IBV=5u CJO=10p VJ=0.7 M=0.5 FC=0.5 TT=100n"))
@@ -134,6 +135,7 @@ object SpiceModels {
         }
         // Back-compat names from the first release.
         add(card("1N4733", ModelFamily.ZENER, "5.1 V zener, 1 W", "D", "IS=1n N=1.5 RS=1 BV=5.1 IBV=49m CJO=200p VJ=0.75 M=0.33"))
+        add(card("1N4611A", ModelFamily.ZENER, "6.6 V low-current reference zener, specified at 250 µA", "D", "IS=10p N=1.5 RS=40 BV=6.59 IBV=250u NBV=1.2 CJO=30p VJ=0.75 M=0.33"))
         add(card("1N4742", ModelFamily.ZENER, "12 V zener, 1 W", "D", "IS=1n N=1.5 RS=2 BV=12 IBV=21m CJO=80p VJ=0.75 M=0.33"))
 
         val l = ModelFamily.LED
@@ -173,6 +175,7 @@ object SpiceModels {
         add(card("2N3819", ModelFamily.NJF, "General purpose, IDSS 12 mA, Vp −3 V", "NJF", "VTO=-3 BETA=1.3m LAMBDA=2m RD=1 RS=1 CGS=4p CGD=1.6p PB=1 IS=33f"))
         add(card("J310", ModelFamily.NJF, "VHF amplifier, IDSS 30 mA, Vp −3 V", "NJF", "VTO=-3 BETA=3.3m LAMBDA=14m RD=1 RS=1 CGS=5p CGD=2.5p PB=1 IS=0.1p"))
         add(card("J201", ModelFamily.NJF, "Low current, IDSS 0.6 mA, Vp −0.8 V", "NJF", "VTO=-0.8 BETA=1m LAMBDA=4m RD=1 RS=1 CGS=3p CGD=3p PB=1 IS=0.1p"))
+        add(card("2N4393", ModelFamily.NJF, "Analog switch and chopper, rDS(on) ≈ 50 Ω, IDSS 15 mA, Vp −1.4 V", "NJF", "VTO=-1.4 BETA=8m LAMBDA=6m RD=1 RS=1 CGS=4p CGD=4.5p PB=1 IS=0.2p"))
         add(card("2N5460", ModelFamily.PJF, "General purpose, IDSS 3 mA, Vp 2 V", "PJF", "VTO=-2 BETA=0.75m LAMBDA=4m RD=2 RS=2 CGS=5p CGD=5p PB=1 IS=0.1p"))
         add(card("J175", ModelFamily.PJF, "Analog switch, IDSS 20 mA, Vp 4.5 V", "PJF", "VTO=-4.5 BETA=1m LAMBDA=10m RD=2 RS=2 CGS=10p CGD=10p PB=1 IS=0.1p"))
 
@@ -285,6 +288,8 @@ object SpiceModels {
         OpAmpSpec("TL072", "Dual JFET input, 3 MHz, 13 V/µs, low noise", 2e5, 3e6, 13e6, 1.5, 1.5, 1.4e-3, 20e-3, 50.0, 1e12, 30e-12),
         OpAmpSpec("TL082", "Dual JFET input, 3 MHz, 13 V/µs", 2e5, 3e6, 13e6, 1.5, 1.5, 1.4e-3, 20e-3, 50.0, 1e12, 30e-12),
         OpAmpSpec("LM741", "Classic single, 1 MHz, 0.5 V/µs, ±2 V headroom", 2e5, 1e6, 0.5e6, 2.0, 2.0, 1.7e-3, 25e-3, 75.0, 2e6, 80e-9),
+        OpAmpSpec("LM301A", "General purpose, compensated with 30 pF: 1 MHz, 0.5 V/µs, 70 nA bias", 1.6e5, 1e6, 0.5e6, 2.0, 2.0, 1.8e-3, 25e-3, 75.0, 2e6, 70e-9),
+        OpAmpSpec("LM308", "Precision super-beta input, 1.5 nA bias; compensated with 30 pF: 1 MHz, 0.3 V/µs", 3e5, 1e6, 0.3e6, 1.5, 1.5, 0.3e-3, 10e-3, 75.0, 40e6, 1.5e-9),
         OpAmpSpec("NE5532", "Dual low-noise audio, 10 MHz, 9 V/µs", 1e5, 10e6, 9e6, 1.5, 1.5, 4e-3, 38e-3, 30.0, 300e3, 200e-9),
         OpAmpSpec("LM833", "Dual audio, 15 MHz, 7 V/µs", 1e5, 15e6, 7e6, 1.5, 1.5, 2.5e-3, 40e-3, 30.0, 175e3, 300e-9),
         OpAmpSpec("OPA2134", "Dual high-fidelity audio, 8 MHz, 20 V/µs, FET input", 1e6, 8e6, 20e6, 1.0, 1.0, 4e-3, 40e-3, 30.0, 1e13, 5e-12),

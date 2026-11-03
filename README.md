@@ -80,12 +80,12 @@ Pepperjack also fills two LTspice gaps that ngspice has:
     flip-flop.
   - Controlled and behavioral sources, voltage-controlled switch, ground and
     net labels.
-- About 110 built-in models, each with a short datasheet summary in the model
+- About 120 built-in models, each with a short datasheet summary in the model
   picker:
   - Diodes, Schottkys, zeners and LEDs.
   - 2N3904/2N2222/BC547/TIP31/2N3055-class transistors and TIP120 Darlingtons.
-  - JFETs, and small-signal to power MOSFETs.
-  - LM358, TL072, NE5532, OPA2134 and MCP6002 op-amps.
+  - JFETs (including the 2N4393 chopper), and small-signal to power MOSFETs.
+  - LM358, TL072, NE5532, OPA2134, MCP6002, LM301A and LM308 op-amps.
   - LM393/LM311 comparators.
   - 78xx/79xx, LM317/LM337 and LDO regulators.
   - NE555/TLC555, PC817/4N35, and crystals.
@@ -94,6 +94,13 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
+- Examples, from an RC filter to a full instrument: channel A of a Foxboro
+  SPEC 200 2AI-P2V RTD-to-0–10 V converter, laid out after the MI 2AI-185
+  component diagram, with a 3-wire Pt100 bridge, a JFET chopper amplifier and
+  a transformer-isolated output. Its clock and transformer are assumptions,
+  listed in its directives. As set up it reads 0.000 V at 0 °C, 5.05 V at
+  50 °C and 9.99 V at 100 °C (R80 sets zero, R77 span); change `tdeg` to set
+  the temperature.
 - Parts tray: tap + for the parts, a category at a time, and drag one up out
   of the tray onto the sheet (or tap it, then tap where it goes). Search
   opens the full picker.

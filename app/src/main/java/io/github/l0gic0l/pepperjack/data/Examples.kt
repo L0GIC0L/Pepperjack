@@ -4,6 +4,7 @@ import io.github.l0gic0l.pepperjack.model.AnalysisConfig
 import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
+import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
@@ -12,6 +13,7 @@ import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.SpiceDialect
 import io.github.l0gic0l.pepperjack.model.Wire
+import io.github.l0gic0l.pepperjack.model.pinPositions
 
 data class Example(val title: String, val summary: String, val build: () -> Circuit)
 
@@ -34,6 +36,7 @@ object Examples {
         Example("555 LED blinker", "NE555 astable at about 1.5 Hz; watch it in live mode") { blinker555() },
         Example("7805 regulator", "12 V with 2 V of ripple in, a steady 5 V out") { regulator7805() },
         Example("Half adder (logic gates)", "XOR and AND gates light the sum and carry LEDs") { halfAdder() },
+        Example("Foxboro SPEC 200 2AI-P2V (RTD to 0–10 V)", "Chopper-stabilized, transformer-isolated RTD converter, channel A") { spec200() },
         Example("Diode I-V curve (netlist)", "Hand-written SPICE netlist with a DC sweep") { diodeNetlist() },
         Example("Buck converter (LTspice syntax)", "Rser, .param and switch models in LTspice dialect") { buckNetlist() },
         Example("Stepped RC filter (LTspice .step)", "Three capacitor values overlaid in one Bode plot") { steppedNetlist() },
@@ -57,6 +60,12 @@ object Examples {
         fun wire(x1: Int, y1: Int, x2: Int, y2: Int) {
             wires += Wire(nextId++, x1, y1, x2, y2)
         }
+
+        /** A wire through [points] in order, each leg horizontal or vertical. */
+        fun wire(vararg points: GridPoint) = points.toList().zipWithNext { a, b -> wire(a.x, a.y, b.x, b.y) }
+
+        fun label(p: GridPoint, name: String) = label(p.x, p.y, name)
+        fun ground(p: GridPoint) = ground(p.x, p.y)
 
         fun probe(x: Int, y: Int) {
             probes += Probe(ProbeType.VOLTAGE, x, y)
@@ -422,6 +431,177 @@ object Examples {
         """,
         SpiceDialect.LTSPICE,
     )
+
+    /**
+     * Channel A of a Foxboro SPEC 200 2AI-P2V, after the MI 2AI-185 component diagram. A
+     * 3-wire Pt100 bridge feeds a chopper-stabilized amplifier, Q6 chopper, U6 AC amplifier,
+     * Q9 demodulator and U7 integrator. Its output is chopped by Q12 into T3; one winding is
+     * demodulated by Q11 and fed back through the span divider, the other by Q10 to the U8
+     * output stage, so the 0–10 V output is isolated from the sensor. Clock, supplies and T3
+     * are assumptions; the directives list them.
+     */
+    private fun spec200(): Circuit = Sheet().run {
+        fun p(x: Int, y: Int) = GridPoint(x, y)
+        fun Part.pin(i: Int) = pinPositions()[i]
+        val h = 3 // rotation that lays a two-terminal part left to right
+
+        // Field supply (output side), isolated A2/B2 supply (input side) and the chopper clock.
+        part(PartKind.VOLTAGE, "VP15", 0, 0, value = "DC 15").also { label(it.pin(0), "p15"); ground(it.pin(1)) }
+        part(PartKind.VOLTAGE, "VN15", 5, 4, rotation = 2, value = "DC 15").also { label(it.pin(1), "n15"); ground(it.pin(0)) }
+        part(PartKind.VOLTAGE, "VA2", 10, 0, value = "DC 15").also { label(it.pin(0), "a2"); ground(it.pin(1)) }
+        part(PartKind.VOLTAGE, "VB2", 15, 4, rotation = 2, value = "DC 15").also { label(it.pin(1), "b2"); ground(it.pin(0)) }
+        part(PartKind.VOLTAGE, "VCK", 20, 0, value = "PULSE(-6 0 0 2u 2u 498u 1m)").also { label(it.pin(0), "ck"); ground(it.pin(1)) }
+
+        // Reference: U9 lifts the 6.6 V zener to about 8.1 V for the bridge.
+        part(PartKind.OPAMP5, "U9", 10, 16, value = "LM301A").also { label(it.pin(2), "a2"); label(it.pin(3), "b2") }
+        part(PartKind.RESISTOR, "R74", 1, 13, value = "15k").also { label(it.pin(0), "a2") }
+        part(PartKind.ZENER, "CR12", 1, 21, rotation = 2, value = "1N4611A").also { ground(it.pin(0)) }
+        wire(p(1, 17), p(7, 17))
+        wire(p(7, 15), p(6, 15), p(6, 19))
+        part(PartKind.RESISTOR, "R73", 6, 19, value = "33.2k").also { ground(it.pin(1)) }
+        wire(p(7, 15), p(7, 11))
+        part(PartKind.RESISTOR, "R39", 7, 11, rotation = h, value = "7.68k")
+        wire(p(11, 11), p(17, 11), p(17, 16))
+        part(PartKind.RESISTOR, "R75", 13, 16, rotation = h, value = "1k")
+        part(PartKind.RESISTOR, "R89", 17, 16, rotation = h, value = "332")
+        label(p(17, 16), "ref")
+
+        // RTD bridge: 6.65 k arms, a 3-wire Pt100 with 5 Ω leads, and the zero resistors.
+        wire(p(21, 16), p(32, 16))
+        part(PartKind.RESISTOR, "R79", 24, 16, value = "6.65k")
+        part(PartKind.RESISTOR, "R81", 32, 16, value = "6.65k")
+        part(PartKind.RESISTOR, "RBLK", 24, 20, value = "5")
+        part(PartKind.RESISTOR, "RTD", 24, 24, value = "{100*(1+3.9083m*tdeg-5.775e-7*tdeg*tdeg)}")
+        part(PartKind.RESISTOR, "RGRN", 24, 28, value = "5").also { ground(it.pin(1)) }
+        part(PartKind.RESISTOR, "R85", 32, 20, value = "32")
+        part(PartKind.RESISTOR, "R86", 32, 24, value = "64")
+        part(PartKind.POT, "R80", 32, 28, value = "10 38.7%")
+        wire(p(34, 30), p(34, 32), p(32, 32))
+        part(PartKind.RESISTOR, "RWHT", 32, 32, value = "5")
+        wire(p(32, 36), p(28, 36), p(28, 28), p(24, 28))
+        label(p(24, 20), "sp")
+        label(p(32, 20), "sm")
+
+        // Differential chopper: Q6 shorts the bridge signal (sp) to the feedback (fbx) every half cycle.
+        label(p(42, 18), "sp")
+        part(PartKind.RESISTOR, "R54", 42, 18, rotation = h, value = "2k")
+        wire(p(46, 18), p(47, 18))
+        label(p(42, 12), "fbx")
+        part(PartKind.RESISTOR, "R55", 42, 12, rotation = h, value = "2k")
+        wire(p(46, 12), p(47, 12), p(47, 14))
+        wire(p(47, 12), p(52, 12))
+        label(p(52, 12), "cm")
+        part(PartKind.CAPACITOR, "C25", 50, 12, value = "1u").also { ground(it.pin(1)) }
+        part(PartKind.NJFET, "Q6", 46, 16, value = "2N4393")
+        label(p(40, 16), "ck")
+        part(PartKind.RESISTOR, "R103", 40, 16, rotation = h, value = "33.2k")
+
+        // U6: AC amplifier with a T-network feedback, gain about 1000.
+        wire(p(47, 18), p(50, 18))
+        part(PartKind.CAPACITOR, "C28", 50, 18, rotation = h, value = "0.1u")
+        part(PartKind.RESISTOR, "R61", 54, 18, rotation = h, value = "10k")
+        part(PartKind.OPAMP5, "U6", 61, 19, value = "LM308").also { label(it.pin(2), "a2"); label(it.pin(3), "b2") }
+        label(p(50, 24), "cm")
+        part(PartKind.CAPACITOR, "C27", 50, 24, rotation = h, value = "0.1u")
+        part(PartKind.RESISTOR, "R62", 54, 24, rotation = h, value = "10k")
+        wire(p(58, 24), p(58, 20))
+        part(PartKind.RESISTOR, "R60", 58, 24, value = "100k").also { ground(it.pin(1)) }
+        wire(p(58, 18), p(58, 10))
+        part(PartKind.RESISTOR, "R59", 58, 10, rotation = h, value = "100k")
+        part(PartKind.RESISTOR, "R64", 62, 10, rotation = h, value = "100k")
+        part(PartKind.RESISTOR, "R63", 62, 10, value = "1k").also { ground(it.pin(1)) }
+        wire(p(66, 10), p(66, 19), p(64, 19))
+
+        // Q9 demodulates in step with Q6; U7 integrates the error.
+        part(PartKind.CAPACITOR, "C32", 66, 19, rotation = h, value = "1u")
+        part(PartKind.RESISTOR, "R65", 70, 19, rotation = h, value = "1k")
+        part(PartKind.NJFET, "Q9", 73, 21, value = "2N4393").also { ground(it.pin(2)) }
+        label(p(67, 21), "ck")
+        part(PartKind.RESISTOR, "R112", 67, 21, rotation = h, value = "82k")
+        part(PartKind.RESISTOR, "R67", 74, 19, rotation = h, value = "40.2k")
+        wire(p(78, 19), p(81, 19))
+        part(PartKind.OPAMP5, "U7", 84, 20, value = "LM301A").also { label(it.pin(2), "a2"); label(it.pin(3), "b2") }
+        wire(p(81, 21), p(77, 21))
+        part(PartKind.RESISTOR, "R68", 80, 21, value = "41.2k").also { ground(it.pin(1)) }
+        part(PartKind.CAPACITOR, "C35", 77, 21, value = "0.1u").also { ground(it.pin(1)) }
+        wire(p(81, 19), p(81, 12))
+        part(PartKind.CAPACITOR, "C36", 81, 15, rotation = h, value = "2.2u")
+        part(PartKind.DIODE, "CR22", 81, 12, rotation = h, value = "FD333")
+        wire(p(85, 12), p(89, 12), p(89, 20), p(87, 20))
+        wire(p(85, 15), p(89, 15))
+
+        // Q12 chops U7's output into T3's 7–9 winding. T3's symbol is windings 7–9 and 1–3;
+        // L46 beside it is the 4–6 winding, coupled to both by K2 and K3.
+        part(PartKind.RESISTOR, "R105", 89, 20, rotation = h, value = "1k")
+        wire(p(93, 20), p(95, 20))
+        part(PartKind.NJFET, "Q12", 94, 22, value = "2N4393").also { ground(it.pin(2)) }
+        label(p(88, 22), "ck")
+        part(PartKind.RESISTOR, "R113", 88, 22, rotation = h, value = "39k")
+        part(PartKind.CAPACITOR, "C41", 95, 20, rotation = h, value = "2.2u")
+        wire(p(99, 20), p(103, 20))
+        part(PartKind.CAPACITOR, "C31", 101, 20, value = "500p").also { ground(it.pin(1)) }
+        part(PartKind.TRANSFORMER, "T3", 105, 20, value = "1 1:3 0.999").also { ground(it.pin(1)); ground(it.pin(3)) }
+        part(PartKind.INDUCTOR, "L46", 107, 28, value = "9").also { label(it.pin(1), "sm") }
+        wire(p(107, 28), p(105, 28))
+        part(PartKind.CAPACITOR, "C45", 105, 28, value = "500p")
+        wire(p(105, 32), p(107, 32))
+
+        // Output side: Q10 demodulates T3's 1–3 winding, R70/C37 filter, U8 doubles it to 0–10 V.
+        wire(p(107, 20), p(113, 20))
+        part(PartKind.RESISTOR, "R69", 113, 20, rotation = h, value = "20.5k")
+        part(PartKind.NJFET, "Q10", 116, 22, value = "2N4393").also { ground(it.pin(2)) }
+        label(p(110, 22), "ck")
+        part(PartKind.RESISTOR, "R49", 110, 22, rotation = h, value = "150k")
+        part(PartKind.RESISTOR, "R70", 117, 20, rotation = h, value = "137k")
+        part(PartKind.CAPACITOR, "C37", 121, 20, value = "1u").also { ground(it.pin(1)) }
+        wire(p(121, 20), p(123, 20), p(123, 18))
+        part(PartKind.OPAMP5, "U8", 126, 17, value = "LM301A").also { label(it.pin(2), "p15"); label(it.pin(3), "n15") }
+        wire(p(123, 16), p(123, 9))
+        part(PartKind.RESISTOR, "R71", 123, 12, rotation = h, value = "274k")
+        part(PartKind.CAPACITOR, "C38", 123, 9, rotation = h, value = "1000p")
+        wire(p(127, 12), p(131, 12), p(131, 17), p(129, 17))
+        wire(p(127, 9), p(131, 9), p(131, 12))
+        wire(p(123, 12), p(119, 12))
+        part(PartKind.RESISTOR, "R72", 119, 12, value = "274k").also { ground(it.pin(1)) }
+        wire(p(131, 17), p(134, 17))
+        label(p(134, 17), "outa")
+
+        // Feedback side: Q11 demodulates T3's 4–6 winding, floating on the bridge's zero side;
+        // the span divider R76 / (R101 + R77) sets how much of it goes back to the chopper.
+        wire(p(107, 28), p(113, 28))
+        part(PartKind.RESISTOR, "R76", 113, 28, rotation = h, value = "20k")
+        part(PartKind.NJFET, "Q11", 116, 30, value = "2N4393").also { label(it.pin(2), "sm") }
+        label(p(110, 30), "ck")
+        part(PartKind.RESISTOR, "RG11", 110, 30, rotation = h, value = "100k")
+        wire(p(117, 28), p(121, 28))
+        label(p(121, 28), "fbx")
+        part(PartKind.RESISTOR, "R101", 121, 28, value = "205")
+        part(PartKind.POT, "R77", 121, 32, value = "1k 1.68%").also { label(it.pin(1), "sm") }
+        wire(p(123, 34), p(123, 36), p(121, 36))
+
+        probe(134, 17)
+        probe(87, 20)
+        circuit(
+            "Foxboro SPEC 200 2AI-P2V",
+            AnalysisConfig(AnalysisType.TRAN, tranStop = "1.5", tranStep = "100u", tranMaxStep = "20u"),
+            directives = """
+                |* Foxboro SPEC 200 2AI-P2V (RTD in, 0-10 V out), channel A, after the MI 2AI-185 component diagram.
+                |* Part names and values follow the drawing. Not on the drawing, so assumed here:
+                |*  - VCK, a 1 kHz clock, stands in for the Q7/Q8 + T1 oscillator; VA2/VB2 for its isolated supply.
+                |*  - T3: 1 H primary (7-9), secondaries 1-3 and 4-6 at 1:3, coupling 0.999. The T3 symbol
+                |*    netlists as LT3_p (7-9) and LT3_s (1-3); L46 is the 4-6 winding.
+                |*  - The isolated common is joined to the field common, and Q11 gets gate resistor RG11.
+                |* Not modelled: the U10 lead-compensation stage and the zero/span jumpers unused for this range.
+                |* Calibrated for a 100-ohm platinum RTD, 0-100 C = 0-10 V: zero with R80, span with R77.
+                |* Set the RTD temperature in degrees C:
+                |.param tdeg=50
+                |* Steps of 20 us resolve the clock; results are kept every 100 us.
+                |.options interp
+                |K2 LT3_p L46 0.999
+                |K3 LT3_s L46 0.999
+            """.trimMargin(),
+        )
+    }
 
     private fun xspiceNetlist() = netlistCircuit(
         "XSPICE limiter (Multisim style)",
