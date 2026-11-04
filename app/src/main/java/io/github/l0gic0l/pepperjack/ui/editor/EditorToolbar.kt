@@ -2,6 +2,7 @@ package io.github.l0gic0l.pepperjack.ui.editor
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -227,7 +228,8 @@ fun SelectionBar(text: String, actions: List<BarAction>, modifier: Modifier = Mo
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 12.dp, end = 4.dp).widthIn(max = 200.dp),
+            // On a narrow screen the text gives way, so the buttons always fit.
+            modifier = Modifier.padding(start = 12.dp, end = 4.dp).widthIn(max = 200.dp).weight(1f, fill = false),
         )
         actions.forEach { action -> ActionButton(action.icon, action.label, onClick = action.onClick) }
         if (onClose != null) ActionButton(Icons.Outlined.Close, "Clear the selection", onClick = onClose)
@@ -243,7 +245,7 @@ fun HintBar(text: String, modifier: Modifier = Modifier, actionLabel: String? = 
         Text(
             text,
             style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp).widthIn(max = 320.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp).widthIn(max = 320.dp).weight(1f, fill = false),
         )
         if (actionLabel != null) {
             androidx.compose.material3.TextButton(onClick = onAction) { Text(actionLabel) }
@@ -253,7 +255,7 @@ fun HintBar(text: String, modifier: Modifier = Modifier, actionLabel: String? = 
 }
 
 @Composable
-private fun ContextSurface(modifier: Modifier, content: @Composable () -> Unit) {
+private fun ContextSurface(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,

@@ -2,6 +2,7 @@ package io.github.l0gic0l.pepperjack
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -119,7 +120,8 @@ class UserFlowTest {
         // The keyboard is up and the matches sit below the search box: scroll to them.
         rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("RL step response"))
         rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("RC step response"))
-        rule.onNodeWithText("RC low-pass filter").assertDoesNotExist()
+        // Only in the examples list: an earlier test may have saved one to the circuits behind it.
+        rule.onNode(hasText("RC low-pass filter") and hasAnyAncestor(hasTestTag(NEW_CIRCUIT_LIST))).assertDoesNotExist()
         rule.onNodeWithText("RC step response").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
         rule.mainClock.autoAdvance = false
