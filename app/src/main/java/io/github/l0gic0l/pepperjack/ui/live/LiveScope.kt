@@ -253,7 +253,7 @@ fun LiveScope(
                     }
                 }
             }
-            if (expanded && onControls) controls?.invoke()
+            if (expanded && onControls) controls()
             if (expanded && !onControls && animator != null && traces.isNotEmpty()) {
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(start = 4.dp),

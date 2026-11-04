@@ -16,11 +16,18 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.TimeUnit
+import org.junit.rules.Timeout
+import org.junit.Rule
 import org.junit.runner.RunWith
 
 /** Runs the bundled ngspice on a real Android runtime: start-up, then every example. */
 @RunWith(AndroidJUnit4::class)
 class EngineInstrumentedTest {
+    // Each run has its own limit; this one catches anything else that sticks, and names it.
+    @get:Rule
+    val timeout: Timeout = Timeout.builder().withTimeout(20, TimeUnit.MINUTES).withLookingForStuckThread(true).build()
+
     private val container =
         (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as PepperjackApplication).container
 

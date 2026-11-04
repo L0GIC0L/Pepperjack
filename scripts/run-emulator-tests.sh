@@ -8,7 +8,7 @@ adb logcat -c || true
 status=$?
 
 echo "::group::Failed tests"
-find app/build/outputs/androidTest-results -name '*.xml' -exec grep -h -A12 '<failure' {} + 2>/dev/null | head -300 || true
+find app/build/outputs/androidTest-results -name '*.xml' -exec grep -h -B1 -A40 '<failure' {} + 2>/dev/null | head -600 || true
 echo "::endgroup::"
 echo "::group::Crash buffer"
 adb logcat -d -b crash || true

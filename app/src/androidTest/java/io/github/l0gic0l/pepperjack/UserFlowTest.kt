@@ -28,14 +28,21 @@ import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
 import io.github.l0gic0l.pepperjack.ui.live.LIVE_CONTROLS
 import io.github.l0gic0l.pepperjack.ui.live.LIVE_SCOPE
 import org.junit.Rule
+import org.junit.rules.Timeout
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.util.concurrent.TimeUnit
 
 /** The main user flows, starting with the two that crashed on a Pixel Fold: opening Settings, and running a simulation. */
 @OptIn(ExperimentalTestApi::class)
 @RunWith(AndroidJUnit4::class)
 class UserFlowTest {
-    @get:Rule
+    // A stuck test fails with its name and the stuck thread's stack, rather than holding up the
+    // rest of the run.
+    @get:Rule(order = 0)
+    val timeout: Timeout = Timeout.builder().withTimeout(5, TimeUnit.MINUTES).withLookingForStuckThread(true).build()
+
+    @get:Rule(order = 1)
     val rule = createAndroidComposeRule<MainActivity>()
 
     @Test
@@ -176,8 +183,13 @@ class UserFlowTest {
         rule.onNodeWithContentDescription("Live simulation").performClick()
         waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_CONTROLS)).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithText("VSET1").assertExists()
+        // The LCD tiles show once the run is done; flip the switch only then, and let the run
+        // it starts finish too, so nothing is cut off mid-run.
+        waitWithFrames(timeoutMillis = 240_000) { rule.onAllNodes(hasText("VOUT1")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithContentDescription("RESET1 switch").performScrollTo().performClick()
         waitWithFrames { rule.onAllNodes(hasText("Closed")).fetchSemanticsNodes().isNotEmpty() }
+        Thread.sleep(1_000) // past the live run's debounce
+        waitWithFrames(timeoutMillis = 240_000) { rule.onAllNodes(hasContentDescription("Live simulation")).fetchSemanticsNodes().isNotEmpty() }
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
     }
 

@@ -70,6 +70,8 @@ jobs:
     name: Emulator tests
     needs: ngspice
     runs-on: ubuntu-latest
+    # A normal run takes about ten minutes; a stuck one should end, so its log can be read.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
