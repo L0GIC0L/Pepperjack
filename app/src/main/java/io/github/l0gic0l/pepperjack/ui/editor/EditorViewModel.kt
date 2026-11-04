@@ -1,5 +1,6 @@
 package io.github.l0gic0l.pepperjack.ui.editor
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.l0gic0l.pepperjack.AppContainer
@@ -586,7 +587,9 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
                     return@launch
                 }
                 val netlist = Netlister.netlist(circuit, container.library.index(), live = true)
+                Log.i(TAG, "Live run of ${circuit.name}: ${netlist.text.length} characters")
                 val result = container.engine.run(netlist.text, dialect, netlist.probeVectors, netlist.warnings)
+                Log.i(TAG, "Live run of ${circuit.name} took ${result.elapsedMs} ms" + (result.error?.let { ": $it" } ?: ""))
                 val view = if (result.succeeded) withContext(Dispatchers.Default) { LiveView.build(circuit.schematic, netlist, result) } else null
                 // The live run doubles as the normal one when it is the same analysis.
                 val publish = result.succeeded && !stepDirective.containsMatchIn(circuit.schematic.directives) &&
@@ -612,6 +615,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
     }
 
     private companion object {
+        const val TAG = "Pepperjack"
         const val LIVE_DEBOUNCE_MS = 300L
     }
 

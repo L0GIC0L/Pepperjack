@@ -55,8 +55,10 @@ class BenchSupplyLiveTest {
         val deadline = System.currentTimeMillis() + timeoutMillis
         while (!condition()) {
             check(System.currentTimeMillis() < deadline) { "Timed out waiting for the live view" }
-            rule.mainClock.advanceTimeBy(100)
-            Thread.sleep(20)
+            // One frame at a time, at about a real screen's pace: the emulator draws every one in
+            // software, and racing the clock ahead flooded it until it went down.
+            rule.mainClock.advanceTimeBy(16)
+            Thread.sleep(16)
         }
     }
 }
