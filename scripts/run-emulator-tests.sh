@@ -63,5 +63,12 @@ sudo -n journalctl --no-pager -q --since '-90 min' 2>/dev/null | grep -iE 'oom|k
 python3 "$(dirname "$0")/minidump-summary.py" /tmp/android-runner "$HOME/.android" || true
 # The host keeps a core when qemu itself crashes; its first thread is the one that faulted.
 sudo -n coredumpctl info --no-pager 2>/dev/null | head -200 || true
+# Its frames, and the stack's words with the symbols they fall in, from gdb.
+if sudo -n coredumpctl list --no-pager >/dev/null 2>&1; then
+  command -v gdb >/dev/null || timeout 300 sudo -n apt-get install -y -qq gdb >/dev/null 2>&1 || true
+  timeout 600 sudo -n coredumpctl debug --no-pager \
+    --debugger-arguments="-batch -ex 'info registers rip rsp' -ex 'bt 30' -ex 'x/80a \$sp' -ex 'info sharedlibrary'" \
+    2>&1 | grep -vE '^\[(New|Thread) ' | head -400 || true
+fi
 echo "::endgroup::"
 exit $status

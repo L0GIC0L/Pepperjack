@@ -109,7 +109,9 @@ jobs:
           # 4 GB, as a mid-range phone has: with the default 2.5 GB the guest froze mid-suite.
           ram-size: 4096M
           heap-size: 576M
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          # Drawn in the guest: with the host renderer (swiftshader_indirect), emulator 37.2.13's
+          # qemu process kept dying with SIGSEGV within seconds of a live view starting to animate.
+          emulator-options: -no-window -gpu guest -noaudio -no-boot-anim -no-snapshot
           script: scripts/run-emulator-tests.sh
 
   app:
