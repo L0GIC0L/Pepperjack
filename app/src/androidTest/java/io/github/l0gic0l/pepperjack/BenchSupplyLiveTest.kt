@@ -48,7 +48,7 @@ class BenchSupplyLiveTest {
         rule.onNodeWithText("VSET1").assertExists()
         // The LCD tiles show once the run is done and its live view is built.
         waitWithFrames(timeoutMillis = 240_000) { rule.onAllNodes(hasText("VOUT1")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {

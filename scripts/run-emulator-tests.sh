@@ -19,8 +19,18 @@ logcat=$!
 done) > "$work/host-memory.txt" &
 memwatch=$!
 
-./gradlew --stacktrace connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=$heavy
+echo "Host: $(uname -srvm); KVM: $(ls -l /dev/kvm 2>&1); $(nproc) CPUs"
+ui=io.github.l0gic0l.pepperjack.UserFlowTest
+
+# The UI flows first, on a fresh device, then everything else: if the emulator goes away,
+# which group it was in says whether the live views or what ran before them are to blame.
+./gradlew --stacktrace connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=$ui
 status=$?
+rm -rf "$work/results-ui" && cp -r app/build/outputs/androidTest-results "$work/results-ui" 2>/dev/null || true
+
+./gradlew --stacktrace connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.notClass=$ui,$heavy"
+rest_status=$?
+[ "$status" -eq 0 ] && status=$rest_status
 rm -rf "$work/results-main" && cp -r app/build/outputs/androidTest-results "$work/results-main" 2>/dev/null || true
 
 # The bench supply's live view is the heaviest thing the app draws: it runs on its own, last.
@@ -30,7 +40,7 @@ heavy_status=$?
 
 kill "$logcat" "$memwatch" 2>/dev/null || true
 echo "::group::Failed tests"
-find "$work/results-main" app/build/outputs/androidTest-results -name '*.xml' -exec grep -h -B1 -A40 '<failure' {} + 2>/dev/null | head -600 || true
+find "$work/results-ui" "$work/results-main" app/build/outputs/androidTest-results -name '*.xml' -exec grep -h -B1 -A40 '<failure' {} + 2>/dev/null | head -600 || true
 echo "::endgroup::"
 echo "::group::Crash buffer"
 # adb waits for a device forever, so these are time-limited in case it has gone.
@@ -38,7 +48,7 @@ timeout 30 adb logcat -d -b crash || echo "(no device)"
 echo "::endgroup::"
 echo "::group::App log"
 # Without the tests' semantics-tree dumps, which would crowd everything else out.
-grep -E 'Pepperjack|AndroidRuntime|DEBUG|libc|scudo|JNI|TestRunner|lowmemorykiller|lmkd|ActivityManager: (Killing|Process)' "$log" | grep -v 'PepperjackTest' | tail -400 || true
+grep -E 'Pepperjack|AndroidRuntime|DEBUG|libc|scudo|JNI|TestRunner|lowmemorykiller|lmkd|ActivityManager: (Killing|Process)' "$log" | grep -v 'PepperjackTree' | tail -400 || true
 echo "::endgroup::"
 echo "::group::Host and device memory, and OOM kills"
 tail -60 "$work/host-memory.txt" 2>/dev/null || true
