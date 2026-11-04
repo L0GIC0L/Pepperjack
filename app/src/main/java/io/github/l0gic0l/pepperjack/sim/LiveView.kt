@@ -114,8 +114,8 @@ class LiveView(
 
             val readouts = schematic.parts.mapNotNull { part ->
                 when (part.kind) {
-                    PartKind.AMMETER, PartKind.LED -> pinCurrent(part.id, 0)?.let { LiveReadout(part.id, part.kind, it) }
-                    PartKind.VOLTMETER -> {
+                    PartKind.AMMETER, PartKind.LCD_AMMETER, PartKind.LED -> pinCurrent(part.id, 0)?.let { LiveReadout(part.id, part.kind, it) }
+                    PartKind.VOLTMETER, PartKind.LCD_VOLTMETER -> {
                         val nets = netlist.pinNets[part.id] ?: return@mapNotNull null
                         val plus = voltage(nets[0]) ?: return@mapNotNull null
                         val minus = voltage(nets[1]) ?: return@mapNotNull null

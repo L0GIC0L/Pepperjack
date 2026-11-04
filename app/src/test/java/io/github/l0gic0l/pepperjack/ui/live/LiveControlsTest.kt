@@ -6,6 +6,11 @@ import io.github.l0gic0l.pepperjack.model.MeterMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PotValue
+import io.github.l0gic0l.pepperjack.model.pinPositions
+import io.github.l0gic0l.pepperjack.model.def
+import io.github.l0gic0l.pepperjack.model.bounds
+import io.github.l0gic0l.pepperjack.model.NOTE_TEXT_SIZE
+import io.github.l0gic0l.pepperjack.model.NOTE_LINE_PITCH
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.sim.LiveReadout
@@ -33,6 +38,19 @@ class LiveControlsTest {
         // One column on a phone, two on an unfolded foldable.
         assertEquals(1, controlColumns(336.dp))
         assertEquals(2, controlColumns(640.dp))
+    }
+
+    @Test
+    fun textBoxesFitTheirText() {
+        val note = Part(1, PartKind.TEXT, "TXT1", 10, 20, value = "One\nthree lines\nhere")
+        val b = note.bounds()
+        // Origin at the top left; three lines tall and as wide as the longest, with a margin.
+        assertEquals(10f, b[0], 1e-6f)
+        assertEquals(20f, b[1], 1e-6f)
+        assertEquals(0.55f * NOTE_TEXT_SIZE * 11 + 1f, b[2] - b[0], 1e-4f)
+        assertEquals(NOTE_LINE_PITCH * 3 + 0.6f, b[3] - b[1], 1e-4f)
+        assertTrue(note.pinPositions().isEmpty())
+        assertTrue(!note.def.emitsSpice)
     }
 
     @Test

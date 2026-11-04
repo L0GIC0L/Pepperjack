@@ -274,13 +274,15 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
             ref = nextReference(schematic, def.refPrefix, kind),
             x = point.x,
             y = point.y,
-            rotation = rotation,
-            mirrored = mirrored,
+            // Text stays upright, so a text box doesn't turn.
+            rotation = if (kind == PartKind.TEXT) 0 else rotation,
+            mirrored = mirrored && kind != PartKind.TEXT,
             value = if (kind == PartKind.LABEL) nextLabel(schematic) else def.defaultValue,
             symbol = symbol,
         )
         edit { it.copy(parts = it.parts + part) }
-        if (kind == PartKind.LABEL) _state.update { it.copy(placing = null, editingPartId = part.id, selectedPartId = part.id) }
+        // A label or text box is placed for its words: ask for them straight away.
+        if (kind == PartKind.LABEL || kind == PartKind.TEXT) _state.update { it.copy(placing = null, editingPartId = part.id, selectedPartId = part.id) }
         return part
     }
 
@@ -386,7 +388,7 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         if (points.isEmpty()) return
         val c = GridPoint((points.minOf { it.x } + points.maxOf { it.x }) / 2, (points.minOf { it.y } + points.maxOf { it.y }) / 2)
         fun turn(p: GridPoint) = GridPoint(c.x - (p.y - c.y), c.y + (p.x - c.x))
-        fun turned(p: Part) = turn(p.origin).let { o -> p.copy(x = o.x, y = o.y, rotation = (p.rotation + 1) % 4) }
+        fun turned(p: Part) = turn(p.origin).let { o -> p.copy(x = o.x, y = o.y, rotation = if (p.kind == PartKind.TEXT) 0 else (p.rotation + 1) % 4) }
         val map = HashMap<GridPoint, GridPoint>()
         parts.filter { it.kind != PartKind.PROBE }.forEach { p -> p.pinPositions().zip(turned(p).pinPositions()).forEach { (from, to) -> map[from] = to } }
         wires.forEach { w -> map[w.start] = turn(w.start); map[w.end] = turn(w.end) }
@@ -431,8 +433,8 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
         clearGroup()
     }
 
-    fun rotateSelected() = updateSelected { it.copy(rotation = (it.rotation + 1) % 4) }
-    fun mirrorSelected() = updateSelected { it.copy(mirrored = !it.mirrored) }
+    fun rotateSelected() = updateSelected { if (it.kind == PartKind.TEXT) it else it.copy(rotation = (it.rotation + 1) % 4) }
+    fun mirrorSelected() = updateSelected { if (it.kind == PartKind.TEXT) it else it.copy(mirrored = !it.mirrored) }
 
     private fun updateSelected(transform: (Part) -> Part) {
         val id = _state.value.selectedPartId ?: return

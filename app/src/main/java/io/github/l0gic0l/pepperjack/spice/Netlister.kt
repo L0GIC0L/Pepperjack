@@ -299,8 +299,8 @@ object Netlister {
                     needsIdealOpAmp = true
                     elements += "$name $nodes ${SpiceModels.IDEAL_OPAMP}"
                 }
-                PartKind.AMMETER -> elements += "$name $nodes 0"
-                PartKind.VOLTMETER -> elements += "$name $nodes ${valueOrDefault()}"
+                PartKind.AMMETER, PartKind.LCD_AMMETER -> elements += "$name $nodes 0"
+                PartKind.VOLTMETER, PartKind.LCD_VOLTMETER -> elements += "$name $nodes ${valueOrDefault()}"
                 PartKind.SPST -> elements += "$name $nodes ${if (SwitchValue.isClosed(value)) CLOSED else OPEN}"
                 PartKind.SPDT -> {
                     val toB = SwitchValue.isB(value)

@@ -58,10 +58,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   current.
 - Interactive parts: tap a toggle or changeover switch to flip it, and drag
   the slider of a selected potentiometer.
+- LCD meters: an LCD voltmeter or ammeter shows its reading in big
+  four-digit figures on the sheet, readable even zoomed out, where other text
+  is hidden.
 - Controls: on a sheet with knobs or switches, the live panel opens on a
-  front panel of every potentiometer and switch, with every meter's reading,
-  so a big circuit can be worked without hunting for its parts. Scope is the
-  other tab, and the panel and the hint above the sheet fold away for room.
+  front panel of every potentiometer and switch, under the sheet's LCD
+  meters (or, if it has none, every meter's reading), so a big circuit can be
+  worked without hunting for its parts. Scope is the other tab, and the panel
+  and the hint above the sheet fold away for room.
 - Value knobs: select a resistor, capacitor, inductor or DC source and a
   slider sweeps its value (a decade either way for R, C and L, logarithmic;
   zero to twice the level for a source). One turn is one undo step.
@@ -89,12 +93,12 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   the plots update too.
 
 **Schematic editor**
-- 46 symbols:
+- 49 symbols:
   - Passives: R, L, C, potentiometer, transformer, crystal.
   - Sources: voltage and current sources (DC, AC, sine, pulse, any SPICE
     source).
   - Switches and meters: toggle and changeover switches, ammeter, voltmeter,
-    measurement probe.
+    LCD ammeter and voltmeter, measurement probe.
   - Semiconductors: diode, Schottky, zener, LED, NPN, PNP, N/P JFETs, N/P
     MOSFETs.
   - ICs: ideal op-amp, op-amp, comparator, fixed and adjustable regulators,
@@ -102,7 +106,7 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - Digital logic: AND, NAND, OR, NOR, XOR, inverter, Schmitt inverter, D
     flip-flop.
   - Controlled and behavioral sources, voltage-controlled switch, ground and
-    net labels.
+    net labels, and text boxes for notes on the sheet.
 - About 120 built-in models, each with a short datasheet summary in the model
   picker:
   - Diodes, Schottkys, zeners and LEDs.
@@ -133,8 +137,9 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   0–5 V at 1 A, each isolated by its own DC-DC module, with a knob each for
   voltage, current limit and over-voltage trip (a latching LM393 that fires a
   MOSFET crowbar). Built from TL431, LM358, LM393, TIP120 and other common
-  parts; in live mode, set it from Controls: VSETn, ISETn and OVPSETn for
-  each channel's volts, current limit and OVP level, and RESETn.
+  parts. Each channel has an LCD voltmeter and ammeter, and text boxes say
+  what is what; in live mode, set it from Controls: VSETn, ISETn and OVPSETn
+  for each channel's volts, current limit and OVP level, and RESETn.
 - The largest is channel A of a Foxboro SPEC 200 2AI-P2V RTD-to-0–10 V
   converter, laid out after the MI 2AI-185 component diagram, with a 3-wire
   Pt100 bridge, a JFET chopper amplifier and a transformer-isolated output.

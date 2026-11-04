@@ -217,7 +217,7 @@ fun PartEditorSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(def.title, style = MaterialTheme.typography.titleLarge)
-            if (part.kind != PartKind.GROUND && part.kind != PartKind.LABEL) {
+            if (part.kind != PartKind.GROUND && part.kind != PartKind.LABEL && part.kind != PartKind.TEXT) {
                 OutlinedTextField(
                     value = ref,
                     onValueChange = { ref = it },
@@ -231,7 +231,7 @@ fun PartEditorSheet(
                     when (part.kind) {
                         PartKind.GROUND -> "Ground is SPICE node 0, the reference for every voltage."
                         PartKind.OPAMP -> "Ideal op-amp: open-loop gain of 10⁶, no bandwidth or supply limits."
-                        PartKind.AMMETER -> "Measures the current flowing in at the + pin, with zero resistance. " +
+                        PartKind.AMMETER, PartKind.LCD_AMMETER -> "Measures the current flowing in at the + pin, with zero resistance. " +
                             "The reading shows while live simulating; probe it to plot the current."
                         else -> def.valueHint
                     },
@@ -306,13 +306,14 @@ fun PartEditorSheet(
                         onValueChange = { value = it },
                         label = { Text(def.valueLabel) },
                         supportingText = { Text(def.valueHint) },
-                        singleLine = def.editor != ValueEditor.EXPRESSION,
+                        singleLine = def.editor != ValueEditor.EXPRESSION && def.editor != ValueEditor.NOTE,
+                        minLines = if (def.editor == ValueEditor.NOTE) 3 else 1,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             fontFamily = if (def.editor == ValueEditor.EXPRESSION) FontFamily.Monospace else FontFamily.Default,
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    if (part.kind in setOf(PartKind.RESISTOR, PartKind.CAPACITOR, PartKind.INDUCTOR, PartKind.VOLTMETER)) {
+                    if (part.kind in setOf(PartKind.RESISTOR, PartKind.CAPACITOR, PartKind.INDUCTOR, PartKind.VOLTMETER, PartKind.LCD_VOLTMETER)) {
                         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             suffixes.forEach { suffix ->
                                 AssistChip(

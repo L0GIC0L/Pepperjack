@@ -32,7 +32,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import io.github.l0gic0l.pepperjack.model.MeterMode
+import androidx.compose.ui.text.font.FontFamily
+import io.github.l0gic0l.pepperjack.model.Part
+import io.github.l0gic0l.pepperjack.ui.schematic.GridTransform
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.LCD_SCREEN
+import io.github.l0gic0l.pepperjack.model.isAmmeter
+import io.github.l0gic0l.pepperjack.model.isLcd
+import io.github.l0gic0l.pepperjack.model.isMeter
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.ProbeValue
@@ -247,11 +254,15 @@ private fun DrawScope.drawLive(
         fontWeight = FontWeight.Medium,
         fontFeatureSettings = "tnum",
     )
-    view.readouts.filter { it.kind == PartKind.AMMETER || it.kind == PartKind.VOLTMETER }.forEach { readout ->
+    view.readouts.filter { it.kind.isMeter }.forEach { readout ->
         val part = schematic.parts.firstOrNull { it.id == readout.partId } ?: return@forEach
         val text = meterText(part.meter, readout, view, position)
-        val (fx, fy) = transformPoint(0f, 2f, part.rotation, part.mirrored)
-        drawTag(textMeasurer, text, style, palette, transform.toScreen(part.x + fx, part.y + fy), centered = true)
+        if (part.kind.isLcd) {
+            drawLcd(textMeasurer, text, part, transform)
+        } else {
+            val (fx, fy) = transformPoint(0f, 2f, part.rotation, part.mirrored)
+            drawTag(textMeasurer, text, style, palette, transform.toScreen(part.x + fx, part.y + fy), centered = true)
+        }
     }
 
     // Measurement probes show their readings in a tag, as Multisim's probes do.
@@ -281,9 +292,34 @@ private fun DrawScope.drawLive(
     }
 }
 
+/** A backlit panel meter's colours, the same in light and dark themes. */
+internal val LcdBackground = Color(0xFF102018)
+internal val LcdDigits = Color(0xFF8CF5A8)
+
+/**
+ * An LCD meter's reading, filling its screen in digits as large as fit, so it can be read at
+ * a glance even zoomed out, where other text is hidden.
+ */
+private fun DrawScope.drawLcd(textMeasurer: TextMeasurer, text: String, part: Part, transform: GridTransform) {
+    val (ax, ay) = transformPoint(LCD_SCREEN[0], LCD_SCREEN[1], part.rotation, part.mirrored)
+    val (bx, by) = transformPoint(LCD_SCREEN[2], LCD_SCREEN[3], part.rotation, part.mirrored)
+    val a = transform.toScreen(part.x + ax, part.y + ay)
+    val b = transform.toScreen(part.x + bx, part.y + by)
+    val screen = androidx.compose.ui.geometry.Rect(minOf(a.x, b.x), minOf(a.y, b.y), maxOf(a.x, b.x), maxOf(a.y, b.y))
+    if (screen.width < 2f || screen.height < 2f) return
+    drawRoundRect(LcdBackground, screen.topLeft, screen.size, CornerRadius(screen.height * 0.12f))
+    val base = TextStyle(color = LcdDigits, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum")
+    var layout = textMeasurer.measure(text, base.copy(fontSize = (screen.height * 0.6f).toSp()))
+    val fit = screen.width * 0.92f / layout.size.width
+    if (fit < 1f) layout = textMeasurer.measure(text, base.copy(fontSize = (screen.height * 0.6f * fit).toSp()))
+    drawText(layout, topLeft = screen.center - Offset(layout.size.width / 2f, layout.size.height / 2f))
+}
+
 /** A meter's reading in its [mode]: the value now, or a measurement over the whole run. */
 fun meterText(mode: MeterMode, readout: LiveReadout, view: LiveView, position: Double): String {
-    val unit = if (readout.kind == PartKind.AMMETER) "A" else "V"
+    // A panel meter shows four digits, as a 3½-digit LCD does.
+    val digits = if (readout.kind.isLcd) 4 else 3
+    val unit = if (readout.kind.isAmmeter) "A" else "V"
     val value = when (mode) {
         MeterMode.NOW -> LiveView.sample(readout.values, position)
         MeterMode.DC -> view.stats(readout)?.mean
@@ -291,7 +327,7 @@ fun meterText(mode: MeterMode, readout: LiveReadout, view: LiveView, position: D
         MeterMode.RMS -> view.stats(readout)?.rms
         MeterMode.PP -> view.stats(readout)?.peakToPeak
     } ?: Double.NaN
-    return Si.formatFixed(value, unit) + mode.suffix
+    return Si.formatFixed(value, unit, digits) + mode.suffix
 }
 
 private fun DrawScope.drawTag(

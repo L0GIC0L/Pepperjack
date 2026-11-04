@@ -72,6 +72,7 @@ import io.github.l0gic0l.pepperjack.model.CustomSymbol
 import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.isMeter
 import io.github.l0gic0l.pepperjack.model.PartLibrary
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
@@ -544,7 +545,7 @@ private fun SchematicPane(
                 selected?.let { part ->
                     when {
                         part.kind == PartKind.POT -> PotControl(part, onPosition = { viewModel.setPotPosition(part.id, it) })
-                        part.kind == PartKind.AMMETER || part.kind == PartKind.VOLTMETER ->
+                        part.kind.isMeter ->
                             MeterModeControl(part, onMode = { viewModel.setMeterMode(part.id, it) })
                         LiveKnob.of(part) != null -> ValueKnob(part, onValue = { value, first -> viewModel.tweakValue(part.id, value, first) })
                     }

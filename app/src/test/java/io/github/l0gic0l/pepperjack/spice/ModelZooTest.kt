@@ -181,6 +181,11 @@ object ModelZoo {
         part(PartKind.AMMETER, "AM1", "pb", "pm")
         part(PartKind.RESISTOR, "R2", "pm", "0", value = "1k")
         part(PartKind.VOLTMETER, "VM1", "pm", "0")
+        // The LCD meters netlist as the round ones do; a text box takes no part at all.
+        part(PartKind.LCD_AMMETER, "LCD1", "pm", "pl")
+        part(PartKind.RESISTOR, "R5", "pl", "0", value = "2k")
+        part(PartKind.LCD_VOLTMETER, "LCD2", "pl", "0")
+        part(PartKind.TEXT, "TXT1", value = "Switches, meters\nand passives")
         part(PartKind.TRANSFORMER, "T1", "s1", "0", "sec", "0", value = "100m 10:1")
         part(PartKind.RESISTOR, "R3", "sec", "0", value = "100")
         part(PartKind.SCHOTTKY, "D1", "sec", "dc", value = "1N5819")
@@ -219,6 +224,14 @@ class ModelZooTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun lcdMetersNetlistAsMetersAndTextBoxesNotAtAll() {
+        val text = Netlister.netlist(ModelZoo.interactiveBench()).text
+        assertTrue(text, text.lines().any { it == "VLCD1 pm pl 0" })
+        assertTrue(text, text.lines().any { it == "RLCD2 pl 0 10Meg" })
+        assertTrue(text, text.lines().none { it.contains("TXT1", ignoreCase = true) || it.contains("passives") && !it.startsWith("*") })
     }
 
     @Test

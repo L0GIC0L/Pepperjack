@@ -20,6 +20,9 @@ import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartCategory
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.isAmmeter
+import io.github.l0gic0l.pepperjack.model.isLcd
+import io.github.l0gic0l.pepperjack.model.isVoltmeter
 import io.github.l0gic0l.pepperjack.model.Schematic
 import io.github.l0gic0l.pepperjack.model.Shape
 import io.github.l0gic0l.pepperjack.model.bounds
@@ -145,7 +148,8 @@ fun DrawScope.drawPartLabels(
     val bottom = b[3] + dy
     when (part.kind) {
         // A probe's name is on its tag; beside the probe it would sit on the net's label.
-        PartKind.GROUND, PartKind.PROBE -> return
+        // A text box's text is its symbol.
+        PartKind.GROUND, PartKind.PROBE, PartKind.TEXT -> return
         PartKind.LABEL -> {
             val layout = textMeasurer.measure(part.value, style.copy(color = labelText, fontWeight = FontWeight.Medium))
             val anchor = transform.toScreen(part.x + dx, part.y + dy)
@@ -164,7 +168,8 @@ fun DrawScope.drawPartLabels(
     }
     val ref = textMeasurer.measure(part.ref, style.copy(fontWeight = FontWeight.Medium))
     val value = displayValue(part)?.let { textMeasurer.measure(shortValue(it), style) }
-    val vertical = (bottom - top) >= (right - left)
+    // An LCD is wide, but its leads leave from the top and bottom: its name goes beside it.
+    val vertical = (bottom - top) >= (right - left) || part.kind.isLcd
     if (vertical) {
         val x = transform.toScreen(right + 0.4f, 0f).x
         val topY = transform.toScreen(0f, top).y
@@ -193,8 +198,9 @@ internal fun shortValue(value: String, max: Int = 40): String = if (value.length
 
 /** The value text shown beside a part, or null when the symbol already shows it. */
 fun displayValue(part: Part): String? = when {
-    part.kind == PartKind.SPST || part.kind == PartKind.SPDT || part.kind == PartKind.AMMETER || part.kind == PartKind.PROBE -> null
-    part.kind == PartKind.VOLTMETER && part.value.trim().let { it.isEmpty() || it.equals("10Meg", true) } -> null
+    part.kind == PartKind.SPST || part.kind == PartKind.SPDT || part.kind.isAmmeter || part.kind == PartKind.PROBE -> null
+    part.kind == PartKind.TEXT -> null
+    part.kind.isVoltmeter && part.value.trim().let { it.isEmpty() || it.equals("10Meg", true) } -> null
     part.kind == PartKind.CUSTOM -> listOfNotNull(part.symbol?.title, part.value.takeIf { it.isNotBlank() }).joinToString(" ")
     part.def.category == PartCategory.DIGITAL -> part.value.trim().takeIf { it.isNotEmpty() && it != "5" }?.let { "$it V" }
     else -> part.value.takeIf { it.isNotBlank() }

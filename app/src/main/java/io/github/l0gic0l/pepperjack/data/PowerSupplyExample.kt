@@ -9,6 +9,8 @@ import io.github.l0gic0l.pepperjack.model.PartKind.CAPACITOR
 import io.github.l0gic0l.pepperjack.model.PartKind.COMPARATOR
 import io.github.l0gic0l.pepperjack.model.PartKind.DIODE
 import io.github.l0gic0l.pepperjack.model.PartKind.LED
+import io.github.l0gic0l.pepperjack.model.PartKind.LCD_VOLTMETER
+import io.github.l0gic0l.pepperjack.model.PartKind.LCD_AMMETER
 import io.github.l0gic0l.pepperjack.model.PartKind.NMOS
 import io.github.l0gic0l.pepperjack.model.PartKind.NPN
 import io.github.l0gic0l.pepperjack.model.PartKind.OPAMP5
@@ -17,8 +19,8 @@ import io.github.l0gic0l.pepperjack.model.PartKind.POT
 import io.github.l0gic0l.pepperjack.model.PartKind.RESISTOR
 import io.github.l0gic0l.pepperjack.model.PartKind.SCHOTTKY
 import io.github.l0gic0l.pepperjack.model.PartKind.SPST
+import io.github.l0gic0l.pepperjack.model.PartKind.TEXT
 import io.github.l0gic0l.pepperjack.model.PartKind.VOLTAGE
-import io.github.l0gic0l.pepperjack.model.PartKind.VOLTMETER
 import io.github.l0gic0l.pepperjack.model.PartKind.ZENER
 
 /**
@@ -92,15 +94,13 @@ private fun Sheet.channel(ch: PsuChannel, ox: Int, oy: Int) {
     p(NPN, "Q${n}01", 13, 2, value = "TIP120")
     wr(11, 2, 9, 2)
     lb(9, 2, b)
-    wr(14, 4, 14, 6, 26, 6)
+    wr(14, 4, 14, 6, 63, 6)
     p(RESISTOR, "R${n}01", 18, 6, value = ch.rt)
     lb(18, 10, "fb$n")
     p(RESISTOR, "R${n}02", 18, 10, value = ch.rb)
     lb(18, 14, iso)
     p(RESISTOR, "R${n}03", 22, 6, value = "4.7k")
     lb(22, 10, iso)
-    p(AMMETER, "AM$n", 26, 6, H)
-    wr(30, 6, 58, 6)
     // OVP divider, and the crowbar across the terminals: through 1 Ω, so it doesn't dump the
     // output capacitor in one spike, and through the shunt, so the current limit holds it.
     p(RESISTOR, "R${n}04", 34, 6, value = ch.rot)
@@ -112,21 +112,24 @@ private fun Sheet.channel(ch: PsuChannel, ox: Int, oy: Int) {
     lb(37, 10, "cg$n")
     p(RESISTOR, "R${n}06", 40, 12, value = "1")
     lb(40, 16, minus)
-    // Output capacitor across the terminals, and the current shunt below the − terminal.
-    p(CAPACITOR, "C${n}02", 46, 6, value = "47u")
-    lb(46, 10, minus)
-    p(RESISTOR, "R${n}07", 46, 10, value = ch.rs)
-    lb(46, 14, iso)
-    wr(46, 10, 58, 10)
-    lb(58, 6, plus)
-    // A load and the panel meter.
-    p(RESISTOR, "RLOAD$n", 52, 6, value = ch.load)
-    if (ch.negative) p(VOLTMETER, "VM$n", 58, 10, U) else p(VOLTMETER, "VM$n", 58, 6)
+    // Output capacitor across the terminals. Everything that leaves by the + terminal comes
+    // back by the − one, through the IOUT meter and then the current shunt.
+    p(CAPACITOR, "C${n}02", 48, 6, value = "47u")
+    lb(48, 10, minus)
+    wr(48, 10, 63, 10)
+    // The panel's voltmeter across the terminals, then its ammeter, as on a bench supply.
+    if (ch.negative) p(LCD_VOLTMETER, "VOUT$n", 63, 10, U) else p(LCD_VOLTMETER, "VOUT$n", 63, 6)
+    p(LCD_AMMETER, "IOUT$n", 48, 10)
+    p(RESISTOR, "R${n}07", 48, 14, value = ch.rs)
+    lb(48, 18, iso)
+    lb(60, 6, plus)
+    // A load to try it on.
+    p(RESISTOR, "RLOAD$n", 54, 6, value = ch.load)
     // The channel floats in the real build. SPICE needs every node referred to ground, so REFn
     // ties the channel's internal common (the shunt's far end) to it; no current flows in it,
     // as nothing else joins the channel to the input.
-    p(RESISTOR, "REF$n", 46, 14, value = "1")
-    gnd(46, 18)
+    p(RESISTOR, "REF$n", 48, 18, value = "1")
+    gnd(48, 22)
 
     // Reference and the three knobs: voltage, current limit, OVP level.
     p(RESISTOR, "R${n}10", -32, 18, value = ch.rref)
@@ -254,10 +257,20 @@ internal fun triplePowerSupply(): Circuit = Sheet().run {
     )
     channels.forEachIndexed { i, ch -> channel(ch, 0, PITCH * i) }
     // On each + terminal. They read against the channel's internal common, so they include the
-    // shunt's drop, and CH2's reads its size; the VMn meters read the terminals.
-    probe(58, 6)
-    probe(58, PITCH + 6)
-    probe(58, 2 * PITCH + 6)
+    // shunt's drop, and CH2's reads its size; the VOUTn meters read the terminals.
+    probe(60, 6)
+    probe(60, PITCH + 6)
+    probe(60, 2 * PITCH + 6)
+
+    // Notes on the sheet: what each channel is, and how to work it.
+    part(TEXT, "TXT1", -64, -20, value = "One input: a 24 V 2.5 A adapter,\nor a USB-C PD trigger at 20 V")
+    listOf("CH1  +0–20 V, 0.7 A", "CH2  −0–20 V, 0.7 A  (its + terminal is the common)", "CH3  0–5 V, 1 A").forEachIndexed { i, title ->
+        part(TEXT, "TXT${i + 2}", -34, PITCH * i - 6, value = title)
+    }
+    part(
+        TEXT, "TXT5", -34, 30,
+        value = "VSET: volts · ISET: current limit · OVPSET: trip level\nWhile live, turn them from Controls; RESET clears a trip",
+    )
 
     circuit(
         "Triple bench power supply",
@@ -271,8 +284,8 @@ internal fun triplePowerSupply(): Circuit = Sheet().run {
             |*   modelled by B1M-B3M (output) and B1I-B3I (input power). Since the channels float,
             |*   CH2 is the same circuit with its + terminal as common. REF1-REF3 only give SPICE a
             |*   reference for each floating channel; no current flows in them. The probes read
-            |*   against that internal common (shunt drop included; CH2's shows its size), the
-            |*   VM1-VM3 meters across the terminals.
+            |*   against that internal common (shunt drop included; CH2's shows its size); the
+            |*   VOUTn and IOUTn panel meters read the terminals.
             |* Each channel: TL431 2.495 V reference; LM358 CV and CC amps diode-ORed (BAT54) onto a
             |*   TIP120 follower fed by a 1 mA current source; 0.22/0.15 ohm low-side shunt.
             |*   VSETn sets the voltage, ISETn the current limit (OCP), OVPSETn the OVP level. Above it

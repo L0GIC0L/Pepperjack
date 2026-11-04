@@ -19,6 +19,7 @@ enum class PartKind {
     GROUND, LABEL,
     POT, TRANSFORMER, CRYSTAL,
     SPST, SPDT, AMMETER, VOLTMETER, PROBE,
+    TEXT, LCD_VOLTMETER, LCD_AMMETER,
     SCHOTTKY, NJFET, PJFET,
     COMPARATOR, REGULATOR, REGULATOR_ADJ, TIMER555, OPTO,
     AND, NAND, OR, NOR, XOR, NOT, SCHMITT, DFF,
@@ -38,7 +39,7 @@ enum class PartCategory(val title: String) {
 }
 
 /** How the properties sheet edits a part's value. */
-enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE }
+enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE, NOTE }
 
 data class PinDef(val name: String, val x: Int, val y: Int)
 
@@ -81,12 +82,39 @@ data class PartDef(
     val stateShapes: ((String) -> List<Shape>)? = null,
 ) {
     val hasValue: Boolean get() = editor != ValueEditor.NONE
-    val emitsSpice: Boolean get() = kind != PartKind.GROUND && kind != PartKind.LABEL && kind != PartKind.PROBE
+    val emitsSpice: Boolean get() = kind != PartKind.GROUND && kind != PartKind.LABEL && kind != PartKind.PROBE && kind != PartKind.TEXT
 
     /** Built-in models for this symbol. */
     val models: List<SpiceModel> get() = families.flatMap { SpiceModels.family(it) }
 
     fun shapesFor(value: String): List<Shape> = stateShapes?.invoke(value) ?: shapes
+}
+
+/** Meters, round or LCD: an ammeter is a 0 V source in series, a voltmeter a resistance across. */
+val PartKind.isAmmeter: Boolean get() = this == PartKind.AMMETER || this == PartKind.LCD_AMMETER
+val PartKind.isVoltmeter: Boolean get() = this == PartKind.VOLTMETER || this == PartKind.LCD_VOLTMETER
+val PartKind.isMeter: Boolean get() = isAmmeter || isVoltmeter
+val PartKind.isLcd: Boolean get() = this == PartKind.LCD_VOLTMETER || this == PartKind.LCD_AMMETER
+
+/** The LCD meters' screen, in symbol units: left, top, right, bottom. The reading fills it while live. */
+val LCD_SCREEN = floatArrayOf(-2.2f, 0.95f, 2.2f, 3.05f)
+
+/** Text height of a text box, in grid units, and its line pitch. */
+const val NOTE_TEXT_SIZE = 0.9f
+const val NOTE_LINE_PITCH = 1.3f * NOTE_TEXT_SIZE
+
+/**
+ * A text box: its lines, left-aligned in a box sized to fit them, with the origin at the top
+ * left. Text doesn't rotate, so text boxes don't either.
+ */
+fun noteShapes(value: String): List<Shape> {
+    val lines = value.ifEmpty { " " }.split('\n')
+    val width = 0.55f * NOTE_TEXT_SIZE * lines.maxOf { it.length }.coerceAtLeast(1) + 1f
+    val height = NOTE_LINE_PITCH * lines.size + 0.6f
+    val box = Shape.Poly(listOf(0f to 0f, width to 0f, width to height, 0f to height), closed = true)
+    return listOf(box) + lines.mapIndexed { i, line ->
+        Shape.Glyph(0.5f, 0.3f + NOTE_LINE_PITCH * (i + 0.5f), line, NOTE_TEXT_SIZE, bold = false, align = GlyphAlign.START)
+    }
 }
 
 /** The drawable definition of a placed part, including user-made symbols. */
@@ -282,6 +310,14 @@ object PartLibrary {
         Shape.Glyph(0f, 2f, letter, 1f),
     ) + plus(0.75f, 0.75f, 0.15f)
 
+    /** A panel meter: a wide LCD, fed from + at the top and − at the bottom. */
+    private fun lcd(unit: String) = listOf(
+        line(0, 0, 0, 0.6), line(0, 3.4, 0, 4),
+        rect(-2.5, 0.6, 2.5, 3.4),
+        rect(LCD_SCREEN[0], LCD_SCREEN[1], LCD_SCREEN[2], LCD_SCREEN[3]),
+        Shape.Glyph(0f, 2f, "– – – $unit", 1f, bold = false),
+    ) + plus(0.55f, 0.25f, 0.15f)
+
     private fun regulator(middle: String) = listOf(
         rect(-2, -1.2, 2, 1),
         line(-3, 0, -2, 0), line(2, 0, 3, 0), line(0, 1, 0, 2),
@@ -416,6 +452,15 @@ object PartLibrary {
             PartKind.VOLTMETER, "Voltmeter", "R", "VM", PartCategory.INTERACTIVE, "10Meg", "Input resistance",
             "Like a bench multimeter's 10 MΩ; use 1T for an ideal meter",
             twoPins, meter("V"),
+        ),
+        PartDef(
+            PartKind.LCD_VOLTMETER, "LCD voltmeter", "R", "LCD", PartCategory.INTERACTIVE, "10Meg", "Input resistance",
+            "A panel meter: big digits on the sheet while live, easy to read zoomed out",
+            twoPins, lcd("V"),
+        ),
+        PartDef(
+            PartKind.LCD_AMMETER, "LCD ammeter", "V", "LCD", PartCategory.INTERACTIVE, "", "", "",
+            twoPins, lcd("A"), editor = ValueEditor.NONE,
         ),
         PartDef(
             PartKind.PROBE, "Measurement probe", "", "PR", PartCategory.INTERACTIVE, ProbeValue.DEFAULT, "Readings",
@@ -654,6 +699,12 @@ object PartLibrary {
             listOf(PinDef("N", 0, 0)),
             listOf(Shape.Circle(0f, 0f, 0.15f, filled = true)),
             editor = ValueEditor.LABEL,
+        ),
+
+        PartDef(
+            PartKind.TEXT, "Text box", "", "TXT", PartCategory.CONNECTION, "Note", "Text",
+            "A note on the sheet; it takes no part in the circuit",
+            emptyList(), noteShapes("Note"), editor = ValueEditor.NOTE, stateShapes = ::noteShapes,
         ),
 
         // Placeholder for a custom part whose symbol is missing.
