@@ -61,5 +61,7 @@ grep -m1 'model name' /proc/cpuinfo || true
 sudo -n dmesg -T 2>/dev/null | grep -iE 'segfault|general protection|trap|qemu|kvm|killed' | tail -20 || true
 sudo -n journalctl --no-pager -q --since '-90 min' 2>/dev/null | grep -iE 'oom|killed|qemu|emulator|core ?dump' | tail -20 || true
 python3 "$(dirname "$0")/minidump-summary.py" /tmp/android-runner "$HOME/.android" || true
+# The host keeps a core when qemu itself crashes; its first thread is the one that faulted.
+sudo -n coredumpctl info --no-pager 2>/dev/null | head -200 || true
 echo "::endgroup::"
 exit $status
