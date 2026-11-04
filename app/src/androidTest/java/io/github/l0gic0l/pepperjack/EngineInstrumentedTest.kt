@@ -78,7 +78,12 @@ class EngineInstrumentedTest {
             result!!
             assertTrue("${example.title}: ${result.error}", result.succeeded)
             val view = LiveView.build(circuit.schematic, netlist, result)
-            Log.i(TAG, "${example.title} live: ${view?.segments?.size} segments, ${view?.samples} samples, max ${view?.maxCurrent} A")
+            Log.i(
+                TAG,
+                "${example.title} live: ${view?.segments?.size} segments, ${view?.samples} samples, max ${view?.maxCurrent} A, " +
+                    "native heap ${android.os.Debug.getNativeHeapAllocatedSize() shr 20} MB, Java heap " +
+                    "${(Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) shr 20} MB",
+            )
             assertTrue(example.title, view != null && view.segments.isNotEmpty())
             // Live views show the DC operating point (or a transient); AC-only examples carry no DC current.
             if (example.title in drivenExamples) assertTrue("${example.title} has current", view!!.maxCurrent > 1e-4)

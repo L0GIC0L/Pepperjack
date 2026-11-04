@@ -11,8 +11,12 @@ adb logcat -c || true
 # The device's log is kept on the host as it is written, so it survives the device going away.
 adb logcat -v threadtime > "$log" 2>/dev/null &
 logcat=$!
-# The host's memory, every 10 s, in case the emulator is killed for want of it.
-(while sleep 10; do echo "$(date -u +%T) $(free -m | awk '/^Mem:/ {print $3 " of " $2 " MB used, " $7 " available"}')"; done) > "$work/host-memory.txt" &
+# The host's and the device's memory, every 10 s, in case either runs short.
+(while sleep 10; do
+    echo "$(date -u +%T) host $(free -m | awk '/^Mem:/ {print $3 "/" $2 " MB used"}')" \
+        "device $(timeout 5 adb shell "grep -E 'MemAvailable' /proc/meminfo" 2>/dev/null | tr -s ' ' | tr -d '\r')" \
+        "app $(timeout 5 adb shell "dumpsys meminfo io.github.l0gic0l.pepperjack | grep -E 'TOTAL PSS|Native Heap:'" 2>/dev/null | tr -s ' ' | tr '\n\r' '  ')"
+done) > "$work/host-memory.txt" &
 memwatch=$!
 
 ./gradlew --stacktrace connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.notClass=$heavy
@@ -36,8 +40,8 @@ echo "::group::App log"
 # Without the tests' semantics-tree dumps, which would crowd everything else out.
 grep -E 'Pepperjack|AndroidRuntime|DEBUG|libc|scudo|JNI|TestRunner|lowmemorykiller|lmkd|ActivityManager: (Killing|Process)' "$log" | grep -v 'PepperjackTest' | tail -400 || true
 echo "::endgroup::"
-echo "::group::Host memory and OOM kills"
-tail -40 "$work/host-memory.txt" 2>/dev/null || true
+echo "::group::Host and device memory, and OOM kills"
+tail -60 "$work/host-memory.txt" 2>/dev/null || true
 sudo -n dmesg -T 2>/dev/null | grep -iE 'out of memory|killed process|oom' | tail -20 || true
 echo "::endgroup::"
 exit $status

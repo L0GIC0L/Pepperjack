@@ -106,6 +106,9 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
+          # 4 GB, as a mid-range phone has: with the default 2.5 GB the guest froze mid-suite.
+          ram-size: 4096M
+          heap-size: 576M
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: scripts/run-emulator-tests.sh
 

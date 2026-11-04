@@ -589,7 +589,11 @@ class EditorViewModel(private val container: AppContainer, private val circuitId
                 val netlist = Netlister.netlist(circuit, container.library.index(), live = true)
                 Log.i(TAG, "Live run of ${circuit.name}: ${netlist.text.length} characters")
                 val result = container.engine.run(netlist.text, dialect, netlist.probeVectors, netlist.warnings)
-                Log.i(TAG, "Live run of ${circuit.name} took ${result.elapsedMs} ms" + (result.error?.let { ": $it" } ?: ""))
+                Log.i(
+                    TAG,
+                    "Live run of ${circuit.name} took ${result.elapsedMs} ms, native heap " +
+                        "${android.os.Debug.getNativeHeapAllocatedSize() shr 20} MB" + (result.error?.let { ": $it" } ?: ""),
+                )
                 val view = if (result.succeeded) withContext(Dispatchers.Default) { LiveView.build(circuit.schematic, netlist, result) } else null
                 // The live run doubles as the normal one when it is the same analysis.
                 val publish = result.succeeded && !stepDirective.containsMatchIn(circuit.schematic.directives) &&
