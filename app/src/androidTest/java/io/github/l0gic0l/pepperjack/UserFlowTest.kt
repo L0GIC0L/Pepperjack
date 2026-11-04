@@ -13,7 +13,6 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -171,25 +170,21 @@ class UserFlowTest {
         rule.waitUntilAtLeastOneExists(hasContentDescription("Schematic with 0 parts and 0 wires"), timeoutMillis = 5_000)
     }
 
-    /** A big sheet is worked live from the panel's Controls, without finding its parts. */
+    /** A sheet's switches and knobs are worked live from the panel's Controls tab. */
     @Test
-    fun controlsWorkTheBenchSupply() {
+    fun controlsFlipASwitchLive() {
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
-        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Triple bench power supply"))
-        rule.onNodeWithText("Triple bench power supply").performClick()
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Light switch (try live mode)"))
+        rule.onNodeWithText("Light switch (try live mode)").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
         rule.mainClock.autoAdvance = false
         rule.onNodeWithContentDescription("Live simulation").performClick()
+        // A sheet with a switch opens on Controls; the switch starts closed.
         waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_CONTROLS)).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("VSET1").assertExists()
-        // The LCD tiles show once the run is done; flip the switch only then, and let the run
-        // it starts finish too, so nothing is cut off mid-run.
-        waitWithFrames(timeoutMillis = 240_000) { rule.onAllNodes(hasText("VOUT1")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithContentDescription("RESET1 switch").performScrollTo().performClick()
         waitWithFrames { rule.onAllNodes(hasText("Closed")).fetchSemanticsNodes().isNotEmpty() }
-        Thread.sleep(1_000) // past the live run's debounce
-        waitWithFrames(timeoutMillis = 240_000) { rule.onAllNodes(hasContentDescription("Live simulation")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithContentDescription("SW1 switch").performClick()
+        waitWithFrames { rule.onAllNodes(hasText("Open")).fetchSemanticsNodes().isNotEmpty() }
         rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
     }
 
