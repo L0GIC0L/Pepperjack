@@ -154,8 +154,12 @@ fun LiveScope(
     colors: Map<Probe, Color>,
     onRemove: (Probe) -> Unit,
     modifier: Modifier = Modifier,
+    controls: (@Composable () -> Unit)? = null,
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
+    // A sheet with knobs or switches opens on them; the scope is a tap away.
+    var showControls by rememberSaveable { mutableStateOf(controls != null) }
+    val onControls = controls != null && showControls
     var measureMask by rememberSaveable { mutableIntStateOf(0) }
     var cursorsOn by rememberSaveable { mutableStateOf(false) }
     var cursorA by rememberSaveable { mutableFloatStateOf(0.25f) }
@@ -189,20 +193,28 @@ fun LiveScope(
     ) {
         Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Scope", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+                if (controls == null) {
+                    Text("Scope", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
+                } else {
+                    Row(Modifier.padding(start = 4.dp, end = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(selected = !showControls, onClick = { showControls = false; expanded = true }, label = { Text("Scope") })
+                        FilterChip(selected = showControls, onClick = { showControls = true; expanded = true }, label = { Text("Controls") })
+                    }
+                }
                 Row(
                     Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    if (traces.isEmpty()) {
+                    if (!onControls && traces.isEmpty()) {
                         Text(
                             "Probe a wire or a part to see its waveform",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    traces.forEach { trace ->
+                    // The traces' chips belong to the scope.
+                    if (!onControls) traces.forEach { trace ->
                         val value = if (animator != null) LiveView.sample(trace.values, animator.position) else 0.0
                         val unit = trace.quantity.unit
                         InputChip(
@@ -229,16 +241,20 @@ fun LiveScope(
                         )
                     }
                 }
-                if (traces.isNotEmpty()) {
+                if (traces.isNotEmpty() || onControls) {
                     IconButton(onClick = { expanded = !expanded }) {
                         Icon(
                             if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
-                            contentDescription = if (expanded) "Hide the scope" else "Show the scope",
+                            contentDescription = when {
+                                onControls -> if (expanded) "Hide the controls" else "Show the controls"
+                                else -> if (expanded) "Hide the scope" else "Show the scope"
+                            },
                         )
                     }
                 }
             }
-            if (expanded && animator != null && traces.isNotEmpty()) {
+            if (expanded && onControls) controls?.invoke()
+            if (expanded && !onControls && animator != null && traces.isNotEmpty()) {
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(start = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),

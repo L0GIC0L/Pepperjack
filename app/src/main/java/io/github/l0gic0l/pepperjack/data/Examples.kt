@@ -96,7 +96,7 @@ object Examples {
         Example("Boost converter", "5 V to about 10 V at 100 kHz with a logic-level MOSFET", P) { boostConverter() },
         Example(
             "Triple bench power supply",
-            "One 24 V input, three isolated outputs: ±0–20 V and 0–5 V with adjustable current limit and OVP",
+            "One 24 V input, three isolated outputs (±0–20 V, 0–5 V); set volts, current limit and OVP from Controls while live",
             P,
             live = true,
         ) { triplePowerSupply() },

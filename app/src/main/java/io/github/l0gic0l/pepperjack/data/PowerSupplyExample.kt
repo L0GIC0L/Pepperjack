@@ -134,18 +134,19 @@ private fun Sheet.channel(ch: PsuChannel, ox: Int, oy: Int) {
     lb(-32, 22, ref)
     p(ZENER, "U${n}03", -32, 26, U, "TL431")
     lb(-32, 26, iso)
-    p(POT, "RV${n}V", -24, 18, value = ch.vSet, mirrored = true)
+    // The knobs have pin 1 at the common, so turning one up (0% to 100%) turns its level up.
+    p(POT, "VSET$n", -24, 22, U, ch.vSet)
     lb(-24, 18, ref)
     lb(-24, 22, iso)
     wr(-26, 20, -28, 20)
     lb(-28, 20, "vs$n")
     p(RESISTOR, "R${n}11", -16, 18, value = "150k")
     lb(-16, 18, ref)
-    p(POT, "RV${n}I", -16, 22, value = ch.iSet, mirrored = true)
+    p(POT, "ISET$n", -16, 26, U, ch.iSet)
     lb(-16, 26, iso)
     wr(-18, 24, -20, 24)
     lb(-20, 24, "is$n")
-    p(POT, "RV${n}O", -6, 18, value = ch.ovpSet, mirrored = true)
+    p(POT, "OVPSET$n", -6, 22, U, ch.ovpSet)
     lb(-6, 18, ref)
     lb(-6, 22, iso)
     wr(-8, 20, -10, 20)
@@ -182,14 +183,14 @@ private fun Sheet.channel(ch: PsuChannel, ox: Int, oy: Int) {
     lb(34, 19, raw)
 
     // OVP: the LM393's output is released above the OVP knob's level, and D05 and R15 then
-    // hold its + input high, so it stays latched whatever the output does next. SWn, a push
+    // hold its + input high, so it stays latched whatever the output does next. RESETn, a push
     // button, resets it.
     amp(COMPARATOR, "U${n}02", ox + 10, oy + 40, "LM393", raw, iso)
     wr(7, 39, 5, 39)
     lb(5, 39, "os$n")
     wr(7, 41, 1, 41)
     lb(5, 41, "ov$n")
-    p(SPST, "SW$n", 1, 41, value = "open")
+    p(SPST, "RESET$n", 1, 41, value = "open")
     lb(1, 45, iso)
     p(RESISTOR, "R${n}14", 17, 36, value = ch.rpu)
     lb(17, 36, raw)
@@ -245,11 +246,11 @@ internal fun triplePowerSupply(): Circuit = Sheet().run {
 
     val channels = listOf(
         // +0–20 V, 0.7 A: set to 12 V, 0.5 A limit, OVP at 14 V, into 47 Ω.
-        PsuChannel(1, 24, "82k", "11.5k", "91k", "11.5k", "0.22", "4.7k", "4.7k", "10k", "10k 40.85%", "10k 29.5%", "10k 37%", "47", negative = false),
+        PsuChannel(1, 24, "82k", "11.5k", "91k", "11.5k", "0.22", "4.7k", "4.7k", "10k", "10k 59.15%", "10k 70.5%", "10k 63%", "47", negative = false),
         // −0–20 V, 0.7 A: set to 15 V with a 0.25 A limit, into 47 Ω, so it is current limiting.
-        PsuChannel(2, 24, "82k", "11.5k", "91k", "11.5k", "0.22", "4.7k", "4.7k", "10k", "10k 26.05%", "10k 64.7%", "10k 19.06%", "47", negative = true),
+        PsuChannel(2, 24, "82k", "11.5k", "91k", "11.5k", "0.22", "4.7k", "4.7k", "10k", "10k 73.95%", "10k 35.3%", "10k 80.94%", "47", negative = true),
         // 0–5 V, 1 A: set to 5.0 V, 0.8 A limit, OVP at 5.5 V, into 10 Ω.
-        PsuChannel(3, 9, "10.5k", "10k", "14k", "10k", "0.15", "1.5k", "1.5k", "3.3k", "10k 2.25%", "10k 23.1%", "10k 8.15%", "10", negative = false),
+        PsuChannel(3, 9, "10.5k", "10k", "14k", "10k", "0.15", "1.5k", "1.5k", "3.3k", "10k 97.75%", "10k 76.9%", "10k 91.85%", "10", negative = false),
     )
     channels.forEachIndexed { i, ch -> channel(ch, 0, PITCH * i) }
     // On each + terminal. They read against the channel's internal common, so they include the
@@ -274,10 +275,10 @@ internal fun triplePowerSupply(): Circuit = Sheet().run {
             |*   VM1-VM3 meters across the terminals.
             |* Each channel: TL431 2.495 V reference; LM358 CV and CC amps diode-ORed (BAT54) onto a
             |*   TIP120 follower fed by a 1 mA current source; 0.22/0.15 ohm low-side shunt.
-            |*   RVnV sets the voltage, RVnI the current limit (OCP), RVnO the OVP level. Above it
+            |*   VSETn sets the voltage, ISETn the current limit (OCP), OVPSETn the OVP level. Above it
             |*   the LM393 trips and latches itself through Dn05/Rn15; it fires the IRLZ44N crowbar
             |*   across the terminals, pulls the current limit to about 0.1 A (Qn03) and lights
-            |*   Dn06. SWn (a push button) resets it.
+            |*   Dn06. RESETn (a push button) resets it.
             |* B1M-B3M start the outputs softly, around 7 ms, as real modules do.
             |* abstol: live mode senses the current in every pin; 1 nA (well under any current here)
             |*   lets those sense currents converge as an OVP latch snaps over.

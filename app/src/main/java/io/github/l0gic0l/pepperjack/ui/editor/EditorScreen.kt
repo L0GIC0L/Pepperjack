@@ -82,6 +82,7 @@ import io.github.l0gic0l.pepperjack.spice.Netlister
 import io.github.l0gic0l.pepperjack.ui.common.writeText
 import io.github.l0gic0l.pepperjack.ui.live.LiveAnimator
 import io.github.l0gic0l.pepperjack.ui.live.LiveBar
+import io.github.l0gic0l.pepperjack.ui.live.LiveControls
 import io.github.l0gic0l.pepperjack.ui.live.LiveKnob
 import io.github.l0gic0l.pepperjack.ui.live.LiveOverlay
 import io.github.l0gic0l.pepperjack.ui.live.LiveScope
@@ -94,6 +95,7 @@ import androidx.compose.material.icons.outlined.Delete
 import io.github.l0gic0l.pepperjack.ui.live.PotControl
 import io.github.l0gic0l.pepperjack.ui.live.ScopeHistory
 import io.github.l0gic0l.pepperjack.ui.live.ValueKnob
+import io.github.l0gic0l.pepperjack.ui.live.controlParts
 import io.github.l0gic0l.pepperjack.ui.results.ResultsPane
 import io.github.l0gic0l.pepperjack.ui.results.plotsToCsv
 import io.github.l0gic0l.pepperjack.ui.results.traceColor
@@ -391,6 +393,7 @@ private fun SchematicPane(
     val history = remember { ScopeHistory() }
 
     var trayOpen by rememberSaveable { mutableStateOf(false) }
+    var liveHintHidden by rememberSaveable { mutableStateOf(false) }
     var draggingPart by remember { mutableStateOf(false) }
     var canvasCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var trayCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -523,7 +526,12 @@ private fun SchematicPane(
                 topBar,
             )
             state.tool == Tool.DELETE -> HintBar("Tap a part or wire to delete it", topBar)
-            state.live && circuit.schematic.parts.isNotEmpty() -> HintBar("Live: flip a switch, select a part for its knob or a meter for its mode, tap a wire to read it", topBar)
+            // It can be hidden, to leave the sheet more room while working it.
+            state.live && circuit.schematic.parts.isNotEmpty() && !liveHintHidden -> HintBar(
+                "Live: flip a switch, select a part for its knob or a meter for its mode, tap a wire to read it",
+                topBar,
+                "Hide",
+            ) { liveHintHidden = true }
             circuit.schematic.parts.isEmpty() -> HintBar("Tap + and drag a part onto the sheet", topBar)
         }
         Column(
@@ -541,7 +549,19 @@ private fun SchematicPane(
                         LiveKnob.of(part) != null -> ValueKnob(part, onValue = { value, first -> viewModel.tweakValue(part.id, value, first) })
                     }
                 }
-                LiveScope(animator, history, probeColors, onRemove = viewModel::removeProbe, modifier = wide)
+                val controls = remember(circuit.schematic.parts) { controlParts(circuit.schematic) }
+                LiveScope(
+                    animator,
+                    history,
+                    probeColors,
+                    onRemove = viewModel::removeProbe,
+                    modifier = wide,
+                    controls = if (controls.isEmpty()) {
+                        null
+                    } else {
+                        { LiveControls(circuit.schematic, controls, animator, onPot = viewModel::setPotPosition, onSwitch = viewModel::toggleSwitch) }
+                    },
+                )
                 // Full width, so the bar keeps its size and place whatever it shows.
                 LiveBar(animator, state.liveRunning, state.liveError, state.liveColorMode, viewModel::setLiveColorMode, modifier = wide)
             }

@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -24,6 +25,7 @@ import io.github.l0gic0l.pepperjack.ui.live.SCOPE_MEASURE
 import io.github.l0gic0l.pepperjack.ui.editor.PARTS_TRAY
 import io.github.l0gic0l.pepperjack.ui.editor.PART_TOOLBAR
 import io.github.l0gic0l.pepperjack.ui.home.ONLINE_SEARCH
+import io.github.l0gic0l.pepperjack.ui.live.LIVE_CONTROLS
 import io.github.l0gic0l.pepperjack.ui.live.LIVE_SCOPE
 import org.junit.Rule
 import org.junit.Test
@@ -160,6 +162,23 @@ class UserFlowTest {
         rule.onNodeWithText("7 parts, 6 wires · drag to move").assertExists()
         rule.onNodeWithContentDescription("Delete the selection").performClick()
         rule.waitUntilAtLeastOneExists(hasContentDescription("Schematic with 0 parts and 0 wires"), timeoutMillis = 5_000)
+    }
+
+    /** A big sheet is worked live from the panel's Controls, without finding its parts. */
+    @Test
+    fun controlsWorkTheBenchSupply() {
+        rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
+        rule.onNodeWithTag(NEW_CIRCUIT_LIST).performScrollToNode(hasText("Triple bench power supply"))
+        rule.onNodeWithText("Triple bench power supply").performClick()
+        rule.waitUntilAtLeastOneExists(hasContentDescription("Live simulation"), timeoutMillis = 10_000)
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithContentDescription("Live simulation").performClick()
+        waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_CONTROLS)).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText("VSET1").assertExists()
+        rule.onNodeWithContentDescription("RESET1 switch").performScrollTo().performClick()
+        waitWithFrames { rule.onAllNodes(hasText("Closed")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTest")
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {

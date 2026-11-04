@@ -1,8 +1,11 @@
 package io.github.l0gic0l.pepperjack.ui.live
 
+import androidx.compose.ui.unit.dp
+import io.github.l0gic0l.pepperjack.data.Examples
 import io.github.l0gic0l.pepperjack.model.MeterMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.PotValue
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.sim.LiveReadout
@@ -18,6 +21,19 @@ import kotlin.math.sin
 
 class LiveControlsTest {
     private fun part(kind: PartKind, value: String) = Part(1, kind, "X1", 0, 0, value = value)
+
+    @Test
+    fun controlsListKnobsAndSwitchesInSheetOrder() {
+        val sheet = Examples.all.first { it.title == "Triple bench power supply" }.build().schematic
+        val refs = controlParts(sheet).map { it.ref }
+        assertEquals((1..3).flatMap { listOf("VSET$it", "ISET$it", "OVPSET$it", "RESET$it") }, refs)
+        // Turned up, a supply's knobs turn its levels up: 0% has the wiper at the common.
+        val vset = sheet.parts.first { it.ref == "VSET1" }
+        assertEquals(0.5915, PotValue.parse(vset.value).position, 1e-9)
+        // One column on a phone, two on an unfolded foldable.
+        assertEquals(1, controlColumns(336.dp))
+        assertEquals(2, controlColumns(640.dp))
+    }
 
     @Test
     fun resistorKnobSweepsADecadeEachWay() {

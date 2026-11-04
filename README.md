@@ -58,6 +58,10 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   current.
 - Interactive parts: tap a toggle or changeover switch to flip it, and drag
   the slider of a selected potentiometer.
+- Controls: on a sheet with knobs or switches, the live panel opens on a
+  front panel of every potentiometer and switch, with every meter's reading,
+  so a big circuit can be worked without hunting for its parts. Scope is the
+  other tab, and the panel and the hint above the sheet fold away for room.
 - Value knobs: select a resistor, capacitor, inductor or DC source and a
   slider sweeps its value (a decade either way for R, C and L, logarithmic;
   zero to twice the level for a source). One turn is one undo step.
@@ -129,7 +133,8 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   0–5 V at 1 A, each isolated by its own DC-DC module, with a knob each for
   voltage, current limit and over-voltage trip (a latching LM393 that fires a
   MOSFET crowbar). Built from TL431, LM358, LM393, TIP120 and other common
-  parts; try the knobs and the OVP reset buttons in live mode.
+  parts; in live mode, set it from Controls: VSETn, ISETn and OVPSETn for
+  each channel's volts, current limit and OVP level, and RESETn.
 - The largest is channel A of a Foxboro SPEC 200 2AI-P2V RTD-to-0–10 V
   converter, laid out after the MI 2AI-185 component diagram, with a 3-wire
   Pt100 bridge, a JFET chopper amplifier and a transformer-isolated output.
