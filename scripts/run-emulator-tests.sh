@@ -20,6 +20,10 @@ done) > "$work/host-memory.txt" &
 memwatch=$!
 
 echo "Host: $(uname -srvm); KVM: $(ls -l /dev/kvm 2>&1); $(nproc) CPUs"
+# The app draws with Vulkan: through the emulator's host GL path, a live view's redraws kept
+# crashing emulator 37.2.13's qemu process (SIGSEGV) within seconds. New processes read this.
+adb shell setprop debug.hwui.renderer skiavk
+echo "hwui renderer: $(adb shell getprop debug.hwui.renderer)"
 ui=io.github.l0gic0l.pepperjack.UserFlowTest
 
 # The UI flows first, on a fresh device, then everything else: if the emulator goes away,
@@ -63,12 +67,29 @@ sudo -n journalctl --no-pager -q --since '-90 min' 2>/dev/null | grep -iE 'oom|k
 python3 "$(dirname "$0")/minidump-summary.py" /tmp/android-runner "$HOME/.android" || true
 # The host keeps a core when qemu itself crashes; its first thread is the one that faulted.
 sudo -n coredumpctl info --no-pager 2>/dev/null | head -200 || true
-# Its frames, and the stack's words with the symbols they fall in, from gdb.
+# Its frames, the faulting instructions, the stack's words, and the mapping the faulting
+# address is in (offsets in a stripped binary can be looked up against the same build).
 if sudo -n coredumpctl list --no-pager >/dev/null 2>&1; then
   command -v gdb >/dev/null || timeout 300 sudo -n apt-get install -y -qq gdb >/dev/null 2>&1 || true
   timeout 600 sudo -n coredumpctl debug --no-pager \
-    --debugger-arguments="-batch -ex 'info registers rip rsp' -ex 'bt 30' -ex 'x/80a \$sp' -ex 'info sharedlibrary'" \
-    2>&1 | grep -vE '^\[(New|Thread) ' | head -400 || true
+    --debugger-arguments="-batch -ex 'info registers' -ex 'bt 30' -ex 'x/12i \$pc' -ex 'x/40a \$sp' -ex 'info proc mappings'" \
+    > "$work/gdb.txt" 2>&1 || true
+  python3 - "$work/gdb.txt" <<'PY' || true
+import re, sys
+lines = open(sys.argv[1], errors="replace").read().splitlines()
+mapping = re.compile(r"^\s*0x([0-9a-f]+)\s+0x([0-9a-f]+)\s+0x[0-9a-f]+\s+0x([0-9a-f]+)")
+maps = [(int(m.group(1), 16), int(m.group(2), 16), int(m.group(3), 16), l) for l in lines if (m := mapping.match(l))]
+for l in lines:
+    if not mapping.match(l) and not re.match(r"^\[(New|Thread) ", l):
+        print(l)
+rip = next((int(l.split()[1], 16) for l in lines if l.startswith("rip")), None)
+print("-- mappings of the faulting address and the emulator binary:")
+for start, end, offset, l in maps:
+    if (rip is not None and start <= rip < end) or "qemu-system" in l:
+        print(l)
+        if rip is not None and start <= rip < end:
+            print(f"   pc is file offset {rip - start + offset:#x} of that mapping")
+PY
 fi
 echo "::endgroup::"
 exit $status
