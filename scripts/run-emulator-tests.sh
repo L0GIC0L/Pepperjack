@@ -48,7 +48,7 @@ timeout 30 adb logcat -d -b crash || echo "(no device)"
 echo "::endgroup::"
 echo "::group::App log"
 # Without the tests' semantics-tree dumps, which would crowd everything else out.
-grep -E 'Pepperjack|AndroidRuntime|DEBUG|libc|scudo|JNI|TestRunner|lowmemorykiller|lmkd|ActivityManager: (Killing|Process)' "$log" | grep -v 'PepperjackTree' | tail -400 || true
+grep -E 'Pepperjack|AndroidRuntime|DEBUG|libc|scudo|JNI|TestRunner|lowmemorykiller|lmkd|ActivityManager: (Killing|Process)' "$log" | grep -vE 'PepperjackTree|nativeloader' | tail -700 || true
 echo "::endgroup::"
 echo "::group::Host and device memory, and OOM kills"
 tail -60 "$work/host-memory.txt" 2>/dev/null || true

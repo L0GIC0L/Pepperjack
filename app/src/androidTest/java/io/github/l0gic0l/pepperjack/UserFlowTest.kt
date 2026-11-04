@@ -11,7 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
@@ -53,7 +53,7 @@ class UserFlowTest {
 
     @Test
     fun runningAnExampleShowsResults() {
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
         // The extended FAB's label is only in the unmerged tree; a tap on it lands on the FAB.
         rule.onNodeWithText("New circuit", useUnmergedTree = true).performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag(NEW_CIRCUIT_LIST), timeoutMillis = 10_000)
@@ -77,7 +77,7 @@ class UserFlowTest {
         rule.onNodeWithContentDescription("Live simulation").performClick()
         waitWithFrames { rule.onAllNodes(hasContentDescription("Stop live simulation")).fetchSemanticsNodes().isNotEmpty() }
         waitWithFrames { rule.onAllNodes(hasText("Operating point")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
     }
 
     @Test
@@ -116,7 +116,7 @@ class UserFlowTest {
         rule.onNodeWithContentDescription("Live simulation").performClick()
         waitWithFrames { rule.onAllNodes(hasText("R1 1 kΩ")).fetchSemanticsNodes().isNotEmpty() }
         waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_SCOPE)).fetchSemanticsNodes().isNotEmpty() }
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
     }
 
     /** Search the examples, run one live, and measure it on the scope with the cursors on. */
@@ -143,7 +143,7 @@ class UserFlowTest {
         waitWithFrames { rule.onAllNodes(hasText("Peak to peak")).fetchSemanticsNodes().isEmpty() }
         rule.onNodeWithTag(SCOPE_CURSORS).performClick()
         waitWithFrames { rule.onAllNodes(hasText("at A")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
     }
 
     /** Box-select a whole example with the area tool, then delete it as one selection. */
@@ -163,7 +163,7 @@ class UserFlowTest {
             up()
         }
         rule.waitUntilAtLeastOneExists(hasContentDescription("Delete the selection"), timeoutMillis = 5_000)
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
         // The divider has 7 parts (V1, its ground, AM1, R1, R2, the out label, VM1) and 6 wires.
         rule.onNodeWithText("7 parts, 6 wires · drag to move").assertExists()
         rule.onNodeWithContentDescription("Delete the selection").performClick()
@@ -185,7 +185,7 @@ class UserFlowTest {
         waitWithFrames { rule.onAllNodes(hasText("Closed")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithContentDescription("SW1 switch").performClick()
         waitWithFrames { rule.onAllNodes(hasText("Open")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {

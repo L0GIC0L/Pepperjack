@@ -8,7 +8,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.printToLog
@@ -48,7 +48,7 @@ class BenchSupplyLiveTest {
         rule.onNodeWithText("VSET1").assertExists()
         // The LCD tiles show once the run is done and its live view is built.
         waitWithFrames(timeoutMillis = 240_000) { rule.onAllNodes(hasText("VOUT1")).fetchSemanticsNodes().isNotEmpty() }
-        rule.onRoot(useUnmergedTree = true).printToLog("PepperjackTree")
+        rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
     }
 
     private fun waitWithFrames(timeoutMillis: Long = 60_000, condition: () -> Boolean) {
