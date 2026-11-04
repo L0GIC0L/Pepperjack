@@ -54,4 +54,12 @@ echo "::group::Host and device memory, and OOM kills"
 tail -60 "$work/host-memory.txt" 2>/dev/null || true
 sudo -n dmesg -T 2>/dev/null | grep -iE 'out of memory|killed process|oom' | tail -20 || true
 echo "::endgroup::"
+echo "::group::Emulator crash reports"
+# The emulator has gone away without a word: its crash handler's minidumps say where, and
+# the host's logs say whether something else ended it.
+grep -m1 'model name' /proc/cpuinfo || true
+sudo -n dmesg -T 2>/dev/null | grep -iE 'segfault|general protection|trap|qemu|kvm|killed' | tail -20 || true
+sudo -n journalctl --no-pager -q --since '-90 min' 2>/dev/null | grep -iE 'oom|killed|qemu|emulator|core ?dump' | tail -20 || true
+python3 "$(dirname "$0")/minidump-summary.py" /tmp/android-runner "$HOME/.android" || true
+echo "::endgroup::"
 exit $status
