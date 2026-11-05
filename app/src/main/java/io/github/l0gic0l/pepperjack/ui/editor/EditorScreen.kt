@@ -1,0 +1,615 @@
+package io.github.l0gic0l.pepperjack.ui.editor
+
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.DataObject
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.IconToggleButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.l0gic0l.pepperjack.AppContainer
+import io.github.l0gic0l.pepperjack.data.Settings
+import io.github.l0gic0l.pepperjack.model.Circuit
+import io.github.l0gic0l.pepperjack.model.CircuitKind
+import io.github.l0gic0l.pepperjack.model.CustomSymbol
+import io.github.l0gic0l.pepperjack.model.GridPoint
+import io.github.l0gic0l.pepperjack.model.Part
+import io.github.l0gic0l.pepperjack.model.PartKind
+import io.github.l0gic0l.pepperjack.model.isMeter
+import io.github.l0gic0l.pepperjack.model.PartLibrary
+import io.github.l0gic0l.pepperjack.model.Probe
+import io.github.l0gic0l.pepperjack.model.ProbeType
+import io.github.l0gic0l.pepperjack.sim.Plot
+import io.github.l0gic0l.pepperjack.sim.PlotKind
+import io.github.l0gic0l.pepperjack.spice.NetlistResult
+import io.github.l0gic0l.pepperjack.spice.Netlister
+import io.github.l0gic0l.pepperjack.ui.common.writeText
+import io.github.l0gic0l.pepperjack.ui.live.LiveAnimator
+import io.github.l0gic0l.pepperjack.ui.live.LiveBar
+import io.github.l0gic0l.pepperjack.ui.live.LiveControls
+import io.github.l0gic0l.pepperjack.ui.live.LiveKnob
+import io.github.l0gic0l.pepperjack.ui.live.LiveOverlay
+import io.github.l0gic0l.pepperjack.ui.live.LiveScope
+import io.github.l0gic0l.pepperjack.ui.live.MeterModeControl
+import io.github.l0gic0l.pepperjack.ui.live.ProbeResultTags
+import androidx.compose.material.icons.automirrored.outlined.RotateRight
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
+import io.github.l0gic0l.pepperjack.ui.live.PotControl
+import io.github.l0gic0l.pepperjack.ui.live.ScopeHistory
+import io.github.l0gic0l.pepperjack.ui.live.ValueKnob
+import io.github.l0gic0l.pepperjack.ui.live.controlParts
+import io.github.l0gic0l.pepperjack.ui.results.ResultsPane
+import io.github.l0gic0l.pepperjack.ui.results.plotsToCsv
+import io.github.l0gic0l.pepperjack.ui.results.traceColor
+import io.github.l0gic0l.pepperjack.ui.schematic.SchematicCanvas
+import io.github.l0gic0l.pepperjack.ui.schematic.SchematicViewport
+import io.github.l0gic0l.pepperjack.ui.theme.LocalCircuitColors
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+
+private enum class EditorSheet { PARTS, ANALYSIS, DIRECTIVES, RENAME }
+private enum class Pane(val label: String) { SCHEMATIC("Schematic"), NETLIST("Netlist"), RESULTS("Results") }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditorScreen(
+    container: AppContainer,
+    settings: Settings,
+    circuitId: String,
+    onBack: () -> Unit,
+    onBrowseModels: (partKind: String) -> Unit,
+) {
+    val viewModel: EditorViewModel = viewModel(key = circuitId) { EditorViewModel(container, circuitId) }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val progress by viewModel.progress.collectAsStateWithLifecycle()
+    val circuit = state.circuit
+
+    if (!state.loaded || circuit == null) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            if (!state.loaded) CircularProgressIndicator() else TextButton(onClick = onBack) { Text("Circuit not found — go back") }
+        }
+        return
+    }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    val viewport = remember { SchematicViewport() }
+    var sheet by remember { mutableStateOf<EditorSheet?>(null) }
+    val isSchematic = circuit.kind == CircuitKind.SCHEMATIC
+    var compactPane by rememberSaveable { mutableStateOf(if (isSchematic) Pane.SCHEMATIC else Pane.NETLIST) }
+    var editorPane by rememberSaveable { mutableStateOf(if (isSchematic) Pane.SCHEMATIC else Pane.NETLIST) }
+    val layout = currentPaneLayout()
+    val libraryFiles by container.library.files.collectAsStateWithLifecycle()
+    val symbols by container.symbols.symbols.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) {
+        container.library.refresh()
+        container.symbols.load()
+    }
+    val libraryIndex = remember(libraryFiles) { container.library.index() }
+    val netlist: NetlistResult? = remember(circuit, libraryIndex) { if (isSchematic) Netlister.netlist(circuit, libraryIndex) else null }
+    val run = { viewModel.run(settings.dialect) }
+
+    // Only runs started with the Run button jump to the results; live updates stay on the schematic.
+    LaunchedEffect(state.runCount, state.resultsRequests) {
+        if ((state.runCount > 0 || state.resultsRequests > 0) && layout == PaneLayout.COMPACT) compactPane = Pane.RESULTS
+    }
+    BackHandler(
+        enabled = state.placing != null || state.wireStart != null || state.selectedPartId != null || state.selectedWireId != null ||
+            state.hasGroup,
+    ) {
+        when {
+            state.placing != null -> viewModel.stopPlacing()
+            state.wireStart != null -> viewModel.cancelWire()
+            state.hasGroup -> viewModel.clearGroup()
+            else -> viewModel.setTool(state.tool)
+        }
+    }
+
+    var pendingCsv by remember { mutableStateOf<List<Plot>?>(null) }
+    val netlistExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) scope.launch {
+            val text = netlist?.text ?: circuit.netlist
+            runCatching { writeText(context, uri, text) }
+                .onSuccess { snackbar.showSnackbar("Netlist exported") }
+                .onFailure { snackbar.showSnackbar(it.message ?: "Export failed") }
+        }
+    }
+    val csvExport = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val plots = pendingCsv
+        pendingCsv = null
+        if (uri != null && plots != null) scope.launch {
+            runCatching { writeText(context, uri, plotsToCsv(plots)) }
+                .onSuccess { snackbar.showSnackbar("Data exported") }
+                .onFailure { snackbar.showSnackbar(it.message ?: "Export failed") }
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = {
+                        viewModel.flush()
+                        onBack()
+                    }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+                },
+                title = {
+                    Column(Modifier.clickable { sheet = EditorSheet.RENAME }) {
+                        Text(circuit.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            (circuit.dialect ?: settings.dialect).label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    }
+                },
+                actions = {
+                    IconToggleButton(
+                        checked = state.live,
+                        onCheckedChange = { viewModel.setLive(it, settings.dialect) },
+                        colors = IconButtonDefaults.iconToggleButtonColors(
+                            checkedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            checkedContentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                        ),
+                    ) {
+                        Icon(Icons.Outlined.Bolt, contentDescription = if (state.live) "Stop live simulation" else "Live simulation")
+                    }
+                    IconButton(onClick = { sheet = EditorSheet.ANALYSIS }) {
+                        Icon(Icons.Outlined.Tune, contentDescription = "Simulation settings")
+                    }
+                    if (state.running) {
+                        FilledTonalIconButton(onClick = viewModel::stop) { Icon(Icons.Outlined.Stop, contentDescription = "Stop simulation") }
+                    } else {
+                        FilledIconButton(onClick = run) { Icon(Icons.Outlined.PlayArrow, contentDescription = "Run simulation") }
+                    }
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "More options") }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (isSchematic) {
+                                DropdownMenuItem(
+                                    text = { Text("SPICE directives") },
+                                    leadingIcon = { Icon(Icons.Outlined.DataObject, null) },
+                                    onClick = { menu = false; sheet = EditorSheet.DIRECTIVES },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Fit to screen") },
+                                    leadingIcon = { Icon(Icons.Outlined.CenterFocusStrong, null) },
+                                    onClick = { menu = false; viewport.requestFit() },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text("Export netlist") },
+                                leadingIcon = { Icon(Icons.Outlined.IosShare, null) },
+                                onClick = { menu = false; netlistExport.launch("${circuit.name}.cir") },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Rename") },
+                                leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                                onClick = { menu = false; sheet = EditorSheet.RENAME },
+                            )
+                        }
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        val probeColors = rememberProbeColors(circuit, netlist, state)
+        val editorContent: @Composable (Pane) -> Unit = { pane ->
+            when {
+                pane == Pane.NETLIST && isSchematic -> NetlistViewer(netlist?.text ?: "", Modifier.fillMaxSize())
+                pane == Pane.NETLIST -> NetlistEditor(circuit.netlist, viewModel::setNetlist, Modifier.fillMaxSize())
+                else -> SchematicPane(
+                    circuit = circuit,
+                    state = state,
+                    viewport = viewport,
+                    showGrid = settings.showGrid,
+                    probeColors = probeColors,
+                    viewModel = viewModel,
+                    symbols = symbols,
+                    onSearchParts = { sheet = EditorSheet.PARTS },
+                    netlist = netlist,
+                    onPlotWire = { viewModel.plotSelectedWire(settings.dialect) },
+                )
+            }
+        }
+        val results: @Composable () -> Unit = {
+            ResultsPane(
+                result = state.result,
+                running = state.running,
+                progress = progress,
+                traces = state.traces,
+                onToggleTrace = viewModel::toggleTrace,
+                onRun = run,
+                onExport = { plots ->
+                    pendingCsv = plots
+                    csvExport.launch("${circuit.name}-${plots.first().name}.csv")
+                },
+            )
+        }
+        AdaptivePanes(
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
+            editor = {
+                if (isSchematic) {
+                    Column {
+                        PaneTabs(listOf(Pane.SCHEMATIC, Pane.NETLIST), editorPane) { editorPane = it }
+                        Box(Modifier.weight(1f)) { editorContent(editorPane) }
+                    }
+                } else {
+                    editorContent(Pane.NETLIST)
+                }
+            },
+            results = results,
+            compact = {
+                val panes = if (isSchematic) Pane.entries.toList() else listOf(Pane.NETLIST, Pane.RESULTS)
+                Column {
+                    PaneTabs(panes, compactPane) { compactPane = it }
+                    Box(Modifier.weight(1f)) {
+                        if (compactPane == Pane.RESULTS) results() else editorContent(compactPane)
+                    }
+                }
+            },
+        )
+    }
+
+    when (sheet) {
+        EditorSheet.PARTS -> PartPickerSheet(symbols, onDismiss = { sheet = null }) { choice ->
+            sheet = null
+            if (layout == PaneLayout.COMPACT) compactPane = Pane.SCHEMATIC else editorPane = Pane.SCHEMATIC
+            viewModel.startPlacing(choice)
+        }
+        EditorSheet.ANALYSIS -> AnalysisSheet(
+            config = circuit.analysis,
+            dialect = circuit.dialect,
+            defaultDialect = settings.dialect,
+            isSchematic = isSchematic,
+            sourceNames = circuit.schematic.parts
+                .filter { it.kind == PartKind.VOLTAGE || it.kind == PartKind.CURRENT }
+                .map { Netlister.spiceName(it) },
+            onDismiss = { sheet = null },
+            onApply = { config, dialect ->
+                sheet = null
+                viewModel.setAnalysis(config)
+                viewModel.setDialect(dialect)
+            },
+        )
+        EditorSheet.DIRECTIVES -> DirectivesSheet(circuit.schematic.directives, onDismiss = { sheet = null }) {
+            sheet = null
+            viewModel.setDirectives(it)
+        }
+        EditorSheet.RENAME -> io.github.l0gic0l.pepperjack.ui.home.RenameDialog(
+            initial = circuit.name,
+            onDismiss = { sheet = null },
+            onConfirm = {
+                sheet = null
+                viewModel.rename(it)
+            },
+        )
+        null -> Unit
+    }
+
+    state.editingPartId?.let { id ->
+        circuit.schematic.parts.firstOrNull { it.id == id }?.let { part ->
+            PartEditorSheet(
+                part,
+                libraryFiles.flatMap { it.models },
+                onDismiss = { viewModel.openEditor(null) },
+                onBrowseOnline = { onBrowseModels(part.kind.name) },
+            ) { ref, value ->
+                viewModel.updatePart(part.id, ref, value)
+                viewModel.openEditor(null)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PaneTabs(panes: List<Pane>, selected: Pane, onSelect: (Pane) -> Unit) {
+    PrimaryTabRow(selectedTabIndex = panes.indexOf(selected).coerceAtLeast(0)) {
+        panes.forEach { pane ->
+            Tab(selected = pane == selected, onClick = { onSelect(pane) }, text = { Text(pane.label) })
+        }
+    }
+}
+
+@Composable
+private fun SchematicPane(
+    circuit: Circuit,
+    state: EditorState,
+    viewport: SchematicViewport,
+    showGrid: Boolean,
+    probeColors: Map<Probe, Color>,
+    viewModel: EditorViewModel,
+    symbols: List<CustomSymbol>,
+    onSearchParts: () -> Unit,
+    netlist: NetlistResult?,
+    onPlotWire: () -> Unit,
+) {
+    val liveView = state.liveView.takeIf { state.live }
+    var lastAnimator by remember { mutableStateOf<LiveAnimator?>(null) }
+    val animator = remember(liveView) { liveView?.let { LiveAnimator(it, lastAnimator) } }
+    LaunchedEffect(animator) { if (animator != null) lastAnimator = animator }
+    val history = remember { ScopeHistory() }
+
+    var trayOpen by rememberSaveable { mutableStateOf(false) }
+    var liveHintHidden by rememberSaveable { mutableStateOf(false) }
+    var draggingPart by remember { mutableStateOf(false) }
+    var canvasCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var trayCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var dragIn by remember { mutableStateOf<Pair<PartChoice, Offset>?>(null) }
+    // A part dragged in from the tray sits a little above the finger, so it stays in sight.
+    val lift = with(LocalDensity.current) { 40.dp.toPx() }
+
+    fun gridAt(window: Offset): GridPoint? {
+        val canvas = canvasCoordinates?.takeIf { it.isAttached } ?: return null
+        if (trayCoordinates?.takeIf { it.isAttached }?.boundsInWindow()?.contains(window) == true) return null
+        val local = canvas.windowToLocal(window) - Offset(0f, lift)
+        if (local.x < 0 || local.y < 0 || local.x > canvas.size.width || local.y > canvas.size.height) return null
+        val g = viewport.transform.toGrid(local)
+        return GridPoint(g.x.roundToInt(), g.y.roundToInt())
+    }
+    val dragHandler = remember {
+        object : PartDragHandler {
+            override fun start(choice: PartChoice, window: Offset) {
+                viewModel.stopPlacing()
+                dragIn = choice to window
+            }
+
+            override fun move(window: Offset) {
+                dragIn = dragIn?.copy(second = window)
+            }
+
+            override fun drop(window: Offset) {
+                val choice = dragIn?.first
+                dragIn = null
+                val point = gridAt(window)
+                if (choice != null && point != null) viewModel.dropPart(choice, point)
+            }
+
+            override fun cancel() {
+                dragIn = null
+            }
+        }
+    }
+    BackHandler(enabled = trayOpen && state.placing == null && state.selectedPartId == null && state.selectedWireId == null) {
+        trayOpen = false
+    }
+    val dropGhost = dragIn?.let { (choice, window) ->
+        gridAt(window)?.let { p ->
+            Part(-1, choice.kind, "", p.x, p.y, value = choice.symbol?.params ?: PartLibrary[choice.kind].defaultValue, symbol = choice.symbol)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        SchematicCanvas(
+            schematic = circuit.schematic,
+            state = state,
+            viewport = viewport,
+            showGrid = showGrid,
+            probeColors = probeColors,
+            onTap = viewModel::tap,
+            onDoubleTap = { viewModel.openEditor(it.id) },
+            onDragPart = { viewModel.select(it.id) },
+            onMovePart = viewModel::movePart,
+            onDrawWire = viewModel::addWire,
+            modifier = Modifier.fillMaxSize().onGloballyPositioned { canvasCoordinates = it },
+            dropGhost = dropGhost,
+            onPartDragging = { draggingPart = it },
+            onSelectArea = viewModel::selectArea,
+            onMoveGroup = viewModel::moveGroup,
+        )
+        if (animator != null) {
+            LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize(), probeColors)
+        } else {
+            ProbeResultTags(circuit.schematic, state.result, netlist, viewport, probeColors, Modifier.fillMaxSize())
+        }
+        val selected = state.selectedPart
+        if (selected != null && state.placing == null && !draggingPart && dragIn == null) {
+            FloatingPartToolbar(
+                part = selected,
+                viewport = viewport,
+                probed = circuit.schematic.probes.any { it.type == ProbeType.CURRENT && it.partId == selected.id },
+                canProbe = Netlister.canProbeCurrent(selected),
+                onEdit = { viewModel.openEditor(selected.id) },
+                onRotate = viewModel::rotateSelected,
+                onMirror = viewModel::mirrorSelected,
+                onDuplicate = viewModel::duplicateSelected,
+                onProbe = { viewModel.toggleCurrentProbe(selected.id) },
+                onDelete = viewModel::deleteSelected,
+            )
+        }
+        val topBar = Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 12.dp, end = 12.dp)
+        when {
+            state.placing != null -> PlacingBar(
+                state.placingSymbol?.title ?: PartLibrary[state.placing].title,
+                onRotate = viewModel::rotatePlacing,
+                onMirror = viewModel::mirrorPlacing,
+                onDone = viewModel::stopPlacing,
+                modifier = topBar,
+            )
+            state.hasGroup -> {
+                val parts = state.group.size
+                val wires = state.groupWires.size
+                SelectionBar(
+                    listOfNotNull(
+                        "$parts part${if (parts == 1) "" else "s"}".takeIf { parts > 0 },
+                        "$wires wire${if (wires == 1) "" else "s"}".takeIf { wires > 0 },
+                    ).joinToString(", ") + " · drag to move",
+                    listOf(
+                        BarAction(Icons.AutoMirrored.Outlined.RotateRight, "Rotate the selection", viewModel::rotateGroup),
+                        BarAction(Icons.Outlined.ContentCopy, "Duplicate the selection", viewModel::duplicateGroup),
+                        BarAction(Icons.Outlined.Delete, "Delete the selection", viewModel::deleteGroup),
+                    ),
+                    topBar,
+                    onClose = viewModel::clearGroup,
+                )
+            }
+            selected != null || dragIn != null -> Unit
+            state.selectedWireId != null -> SelectionBar(
+                if (state.live) "Wire · tap Plot to scope it" else "Wire · tap Plot for its waveform",
+                listOf(
+                    BarAction(Icons.AutoMirrored.Outlined.ShowChart, "Plot", onPlotWire),
+                    BarAction(Icons.Outlined.Delete, "Delete", viewModel::deleteSelected),
+                ),
+                topBar,
+            )
+            state.tool == Tool.AREA -> HintBar("Drag a box around parts to select them, or tap parts one by one", topBar)
+            state.tool == Tool.WIRE -> HintBar(
+                if (state.wireStart == null) "Drag to draw a wire, or tap two points" else "Tap the next point",
+                topBar,
+                if (state.wireStart != null) "Finish" else null,
+                viewModel::cancelWire,
+            )
+            state.tool == Tool.PROBE -> HintBar(
+                "Tap a wire to put a probe there, or a part to probe its current; tap a probe to remove it",
+                topBar,
+            )
+            state.tool == Tool.DELETE -> HintBar("Tap a part or wire to delete it", topBar)
+            // It can be hidden, to leave the sheet more room while working it.
+            state.live && circuit.schematic.parts.isNotEmpty() && !liveHintHidden -> HintBar(
+                "Live: flip a switch, select a part for its knob or a meter for its mode, tap a wire to read it",
+                topBar,
+                "Hide",
+            ) { liveHintHidden = true }
+            circuit.schematic.parts.isEmpty() -> HintBar("Tap + and drag a part onto the sheet", topBar)
+        }
+        Column(
+            Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 16.dp, start = 12.dp, end = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val wide = Modifier.widthIn(max = 640.dp).fillMaxWidth()
+            if (state.live) {
+                selected?.let { part ->
+                    when {
+                        part.kind == PartKind.POT -> PotControl(part, onPosition = { viewModel.setPotPosition(part.id, it) })
+                        part.kind.isMeter ->
+                            MeterModeControl(part, onMode = { viewModel.setMeterMode(part.id, it) })
+                        LiveKnob.of(part) != null -> ValueKnob(part, onValue = { value, first -> viewModel.tweakValue(part.id, value, first) })
+                    }
+                }
+                val controls = remember(circuit.schematic.parts) { controlParts(circuit.schematic) }
+                LiveScope(
+                    animator,
+                    history,
+                    probeColors,
+                    onRemove = viewModel::removeProbe,
+                    modifier = wide,
+                    controls = if (controls.isEmpty()) {
+                        null
+                    } else {
+                        { LiveControls(circuit.schematic, controls, animator, onPot = viewModel::setPotPosition, onSwitch = viewModel::toggleSwitch) }
+                    },
+                )
+                // Full width, so the bar keeps its size and place whatever it shows.
+                LiveBar(animator, state.liveRunning, state.liveError, state.liveColorMode, viewModel::setLiveColorMode, modifier = wide)
+            }
+            if (trayOpen) {
+                PartsTray(
+                    symbols = symbols,
+                    onPick = viewModel::startPlacing,
+                    drag = dragHandler,
+                    onSearch = onSearchParts,
+                    onClose = { trayOpen = false },
+                    modifier = wide.onGloballyPositioned { trayCoordinates = it },
+                )
+            }
+            EditorToolbar(
+                tool = state.tool,
+                canUndo = state.canUndo,
+                canRedo = state.canRedo,
+                onTool = viewModel::setTool,
+                onParts = { trayOpen = !trayOpen },
+                onUndo = viewModel::undo,
+                onRedo = viewModel::redo,
+            )
+        }
+    }
+}
+
+/** Probe markers take the color of their trace in the results, matching LTspice's behaviour. */
+@Composable
+private fun rememberProbeColors(circuit: Circuit, netlist: NetlistResult?, state: EditorState): Map<Probe, Color> {
+    val palette = LocalCircuitColors.current.traces
+    val outline = MaterialTheme.colorScheme.outline
+    val probes = circuit.schematic.allProbes
+    return remember(probes, netlist, state.result, state.traces, palette, state.live) {
+        // While live, the scope draws every probe, so each gets its own colour there and on the sheet.
+        if (state.live) return@remember probes.mapIndexed { i, p -> p to palette[i % palette.size] }.toMap()
+        val probes = netlist?.probeVectors.orEmpty()
+        val result = state.result
+        val plot = result?.plots?.firstOrNull { it.kind != PlotKind.OP }
+        if (plot == null) {
+            probes.mapIndexed { i, p -> p.probe to palette[i % palette.size] }.toMap()
+        } else {
+            val selected = state.traces[plot.kind].orEmpty()
+            val ordered = plot.vectors.filter { it.name in selected }
+            probes.associate { p ->
+                val index = ordered.indexOfFirst { it.name == p.vector }
+                p.probe to if (index >= 0) traceColor(palette, index, ordered.size, 0) else outline
+            }
+        }
+    }
+}

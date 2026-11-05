@@ -33,3 +33,6 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# ngspice native libraries are produced by scripts/build-ngspice-android.sh (CI builds them)
+app/src/main/jniLibs/
