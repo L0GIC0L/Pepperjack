@@ -29,20 +29,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.ExpandLess
-import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -63,6 +61,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -138,7 +137,31 @@ fun scopeRange(low: Double, high: Double): Pair<Double, Double> {
 }
 
 /**
- * The live oscilloscope: the schematic's probes, plotted while live simulating. A transient
+ * What the live panel shows: open or folded down to its bar, which of its two tabs, and how
+ * tall it has been dragged. It is held by the editor, which lays the sheet out around it.
+ */
+@Stable
+class LivePanelState(open: Boolean = true, controlsTab: Boolean = true, controlsHeight: Float = Float.NaN, scopeHeight: Float = Float.NaN) {
+    var open by mutableStateOf(open)
+
+    /** The Controls tab is chosen; it only shows on a sheet that has knobs or switches. */
+    var controlsTab by mutableStateOf(controlsTab)
+
+    /** The docked panel's content height on each tab in dp, once dragged; NaN until then. */
+    var controlsHeight by mutableFloatStateOf(controlsHeight)
+    var scopeHeight by mutableFloatStateOf(scopeHeight)
+
+    companion object {
+        val Saver = listSaver<LivePanelState, Any>(
+            save = { listOf(it.open, it.controlsTab, it.controlsHeight, it.scopeHeight) },
+            restore = { LivePanelState(it[0] as Boolean, it[1] as Boolean, it[2] as Float, it[3] as Float) },
+        )
+    }
+}
+
+/**
+ * The live panel's tabs. Controls is the sheet's front panel (see [LiveControls]); Scope is
+ * the live oscilloscope: the schematic's probes, plotted while live simulating. A transient
  * is swept in step with the playback, with a cursor at the time being shown; an operating
  * point rolls along over the last ten seconds. Voltages share the left scale, currents the
  * right, so channels of one kind compare directly.
@@ -146,20 +169,23 @@ fun scopeRange(low: Double, high: Double): Pair<Double, Double> {
  * Like a bench scope it measures each channel (mean, RMS, peak to peak, frequency and so on)
  * and has two time cursors, A and B, to drag; with the cursors on, measurements cover only
  * the time between them.
+ *
+ * The content is at most [cap] tall and scrolls beyond that; the plot grows with it.
  */
 @Composable
 fun LiveScope(
+    panel: LivePanelState,
     animator: LiveAnimator?,
     history: ScopeHistory,
     colors: Map<Probe, Color>,
     onRemove: (Probe) -> Unit,
+    cap: Dp,
     modifier: Modifier = Modifier,
-    controls: (@Composable () -> Unit)? = null,
+    /** The content's height in pixels, as laid out. */
+    onContentHeight: (Int) -> Unit = {},
+    controls: (@Composable (Modifier) -> Unit)? = null,
 ) {
-    var expanded by rememberSaveable { mutableStateOf(true) }
-    // A sheet with knobs or switches opens on them; the scope is a tap away.
-    var showControls by rememberSaveable { mutableStateOf(controls != null) }
-    val onControls = controls != null && showControls
+    val onControls = controls != null && panel.controlsTab
     var measureMask by rememberSaveable { mutableIntStateOf(0) }
     var cursorsOn by rememberSaveable { mutableStateOf(false) }
     var cursorA by rememberSaveable { mutableFloatStateOf(0.25f) }
@@ -185,76 +211,61 @@ fun LiveScope(
     }
 
     val numbers = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shadowElevation = 3.dp,
-        modifier = modifier.testTag(LIVE_SCOPE),
-    ) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (controls == null) {
-                    Text("Scope", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 4.dp))
-                } else {
-                    Row(Modifier.padding(start = 4.dp, end = 4.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(selected = !showControls, onClick = { showControls = false; expanded = true }, label = { Text("Scope") })
-                        FilterChip(selected = showControls, onClick = { showControls = true; expanded = true }, label = { Text("Controls") })
-                    }
-                }
-                Row(
-                    Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (!onControls && traces.isEmpty()) {
-                        Text(
-                            "Probe a wire or a part to see its waveform",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    // The traces' chips belong to the scope.
-                    if (!onControls) traces.forEach { trace ->
-                        val value = if (animator != null) LiveView.sample(trace.values, animator.position) else 0.0
-                        val unit = trace.quantity.unit
-                        InputChip(
-                            selected = false,
-                            onClick = { onRemove(trace.probe) },
-                            label = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(trace.label, maxLines = 1)
-                                    Spacer(Modifier.width(6.dp))
-                                    // The reading has a fixed slot, so the chips beside it don't shift as it changes.
-                                    Text(
-                                        Si.formatFixed(value, unit),
-                                        style = numbers,
-                                        textAlign = TextAlign.End,
-                                        maxLines = 1,
-                                        modifier = Modifier.width(textWidth("-888 m$unit", numbers)),
-                                    )
-                                }
-                            },
-                            leadingIcon = {
-                                Box(Modifier.size(10.dp).background(colors[trace.probe] ?: MaterialTheme.colorScheme.primary, CircleShape))
-                            },
-                            trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Remove ${trace.label}", Modifier.size(16.dp)) },
-                        )
-                    }
-                }
-                if (traces.isNotEmpty() || onControls) {
-                    IconButton(onClick = { expanded = !expanded }) {
-                        Icon(
-                            if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
-                            contentDescription = when {
-                                onControls -> if (expanded) "Hide the controls" else "Show the controls"
-                                else -> if (expanded) "Hide the scope" else "Show the scope"
-                            },
-                        )
-                    }
+    Column(modifier.testTag(LIVE_SCOPE).padding(horizontal = 8.dp)) {
+        Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (controls == null) {
+                Text("Scope", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(start = 8.dp, end = 8.dp))
+            } else {
+                Row(Modifier.padding(start = 4.dp, end = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilterChip(selected = panel.controlsTab, onClick = { panel.controlsTab = true }, label = { Text("Controls") })
+                    FilterChip(selected = !panel.controlsTab, onClick = { panel.controlsTab = false }, label = { Text("Scope") })
                 }
             }
-            if (expanded && onControls) controls()
-            if (expanded && !onControls && animator != null && traces.isNotEmpty()) {
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!onControls && traces.isEmpty()) {
+                    Text(
+                        "Probe a wire or a part to see its waveform",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                // The traces' chips belong to the scope.
+                if (!onControls) traces.forEach { trace ->
+                    val value = if (animator != null) LiveView.sample(trace.values, animator.position) else 0.0
+                    val unit = trace.quantity.unit
+                    InputChip(
+                        selected = false,
+                        onClick = { onRemove(trace.probe) },
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(trace.label, maxLines = 1)
+                                Spacer(Modifier.width(6.dp))
+                                // The reading has a fixed slot, so the chips beside it don't shift as it changes.
+                                Text(
+                                    Si.formatFixed(value, unit),
+                                    style = numbers,
+                                    textAlign = TextAlign.End,
+                                    maxLines = 1,
+                                    modifier = Modifier.width(textWidth("-888 m$unit", numbers)),
+                                )
+                            }
+                        },
+                        leadingIcon = {
+                            Box(Modifier.size(10.dp).background(colors[trace.probe] ?: MaterialTheme.colorScheme.primary, CircleShape))
+                        },
+                        trailingIcon = { Icon(Icons.Outlined.Close, contentDescription = "Remove ${trace.label}", Modifier.size(16.dp)) },
+                    )
+                }
+            }
+        }
+        val content = Modifier.heightIn(max = cap).onSizeChanged { onContentHeight(it.height) }
+        if (onControls) controls(content.verticalScroll(rememberScrollState()))
+        if (!onControls && animator != null && traces.isNotEmpty()) {
+            Column(content.verticalScroll(rememberScrollState())) {
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(start = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -278,7 +289,8 @@ fun LiveScope(
                 Canvas(
                     Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        // What the chips above leave of the room there is, within reason.
+                        .height((cap - 56.dp).coerceIn(96.dp, 320.dp))
                         .padding(bottom = 4.dp)
                         .clipToBounds()
                         .then(

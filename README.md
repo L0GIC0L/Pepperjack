@@ -61,11 +61,15 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 - LCD meters: an LCD voltmeter or ammeter shows its reading in big
   four-digit figures on the sheet, readable even zoomed out, where other text
   is hidden.
+- The live panel: the playback bar with the Controls and Scope tabs under it.
+  On a phone it is docked below the sheet, which fits itself into the room
+  above; drag the panel's bar to give it more or less of the screen, right
+  down to just the bar. With two panes (an unfolded foldable, a tablet,
+  landscape) it takes the second pane, and the sheet has the first whole.
 - Controls: on a sheet with knobs or switches, the live panel opens on a
   front panel of every potentiometer and switch, under the sheet's LCD
   meters (or, if it has none, every meter's reading), so a big circuit can be
-  worked without hunting for its parts. Scope is the other tab, and the panel
-  and the hint above the sheet fold away for room.
+  worked without hunting for its parts. Scope is the other tab.
 - Value knobs: select a resistor, capacitor, inductor or DC source and a
   slider sweeps its value (a decade either way for R, C and L, logarithmic;
   zero to twice the level for a source). One turn is one undo step.
@@ -217,7 +221,11 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 - Unfolded foldables and tablets show the editor and results side by side,
   split exactly at the hinge when it separates the screen. In tabletop posture
   the plots sit above the fold and the editor below it, where it is easy to
-  touch. Mouse-wheel zoom works on DeX, Chromebooks and tablets with a
+  touch. While live, the second pane is the live panel's, with Results a tab
+  away.
+- On a narrow phone the tool palette's buttons narrow so that all of it is in
+  view, and a long circuit name wraps to a second line rather than being cut
+  short. Mouse-wheel zoom works on DeX, Chromebooks and tablets with a
   trackpad.
 
 ## Install

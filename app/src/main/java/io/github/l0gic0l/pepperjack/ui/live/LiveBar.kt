@@ -1,9 +1,15 @@
 package io.github.l0gic0l.pepperjack.ui.live
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Box
@@ -16,12 +22,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Replay
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,10 +59,10 @@ import kotlin.math.roundToInt
 private val speeds = listOf(0.1f, 0.25f, 0.5f, 1f, 2f, 4f)
 
 /**
- * Status and controls for live simulation, shown above the editing toolbar. Every slot has a
- * fixed width, and numbers use tabular digits, so nothing shifts as the playback time ticks.
+ * The live panel's bar: the run's playback (pause, restart, the time being shown, the speed),
+ * what the wires' colours stand for, and [trailing] (the fold button, when the panel is
+ * docked). It is one row: on a narrow screen it shortens its labels and drops the colour scale.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LiveBar(
     animator: LiveAnimator?,
@@ -67,75 +71,112 @@ fun LiveBar(
     mode: LiveColorMode,
     onMode: (LiveColorMode) -> Unit,
     modifier: Modifier = Modifier,
+    /** A grip at the top edge, for a bar the panel is dragged by. */
+    grip: Boolean = false,
+    trailing: @Composable () -> Unit = {},
 ) {
     val palette = rememberLivePalette()
     val numbers = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
     Surface(
-        shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
         contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        shadowElevation = 3.dp,
         modifier = modifier,
     ) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                itemVerticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+        Column {
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val roomy = maxWidth >= 520.dp
+                val scale = maxWidth >= 400.dp
                 val view = animator?.view
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    StatusIcon {
-                        when {
-                            running -> CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            error != null -> Icon(Icons.Outlined.ErrorOutline, contentDescription = "Live simulation failed")
-                            else -> Icon(Icons.Outlined.Bolt, contentDescription = "Live simulation")
-                        }
-                    }
+                Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (animator != null && view != null && view.duration > 0) {
-                        IconButton(onClick = { animator.playing = !animator.playing }) {
+                        IconButton(onClick = { animator.playing = !animator.playing }, modifier = Modifier.size(40.dp)) {
                             Icon(
                                 if (animator.playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                                 contentDescription = if (animator.playing) "Pause playback" else "Play",
                             )
                         }
-                        IconButton(onClick = animator::restart) { Icon(Icons.Outlined.Replay, contentDescription = "Restart playback") }
-                        Text(
-                            "${Si.formatFixed(animator.simTime, "s")} / ${Si.formatFixed(view.duration, "s")}",
-                            style = numbers,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            modifier = Modifier.width(textWidth("-88.8 ms / -88.8 ms", numbers)),
-                        )
+                        IconButton(onClick = animator::restart, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Outlined.Replay, contentDescription = "Restart playback")
+                        }
+                        val now = Si.formatFixed(animator.simTime, "s")
+                        val total = Si.formatFixed(view.duration, "s")
+                        if (roomy) {
+                            Text(
+                                "$now / $total",
+                                style = numbers,
+                                textAlign = TextAlign.Center,
+                                maxLines = 1,
+                                modifier = Modifier.width(textWidth("-88.8 ms / -88.8 ms", numbers)),
+                            )
+                        } else {
+                            // Two short lines take half the width of one long one.
+                            val small = numbers.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize)
+                            Column(Modifier.width(textWidth("of -88.8 ms", small)), horizontalAlignment = Alignment.End) {
+                                Text(now, style = numbers, maxLines = 1)
+                                Text("of $total", style = small, maxLines = 1, color = LocalContentColor.current.copy(alpha = 0.7f))
+                            }
+                        }
                         TextButton(
                             onClick = {
                                 val next = speeds.indexOfFirst { it > animator.speed + 1e-3f }
                                 animator.speed = speeds[if (next < 0) 0 else next]
                             },
                             contentPadding = PaddingValues(horizontal = 4.dp),
-                            modifier = Modifier.width(60.dp),
+                            modifier = Modifier.width(44.dp).semantics { contentDescription = "Playback speed" },
                         ) { Text(speedLabel(animator.speed), style = numbers) }
-                    } else if (view != null) {
-                        Text("Operating point", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(end = 8.dp))
+                    } else {
+                        Text(
+                            when {
+                                view != null -> "Operating point"
+                                running -> "Simulating…"
+                                else -> "Live"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(start = 12.dp, end = 8.dp),
+                        )
                     }
-                }
-                if (view != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        LiveColorMode.entries.forEach { m ->
-                            FilterChip(selected = mode == m, onClick = { onMode(m) }, label = { Text(m.label) })
+                    Spacer(Modifier.weight(1f))
+                    if (view != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            LiveColorMode.entries.forEach { m ->
+                                FilterChip(
+                                    selected = mode == m,
+                                    onClick = { onMode(m) },
+                                    label = { Text(if (roomy) m.label else m.short) },
+                                    modifier = Modifier.semantics { contentDescription = "Colour the wires by ${m.label.lowercase()}" },
+                                )
+                            }
+                            if (scale) Legend(palette, mode, view.maxVoltage, view.maxCurrent, numbers, if (roomy) 96.dp else 64.dp)
                         }
-                        Legend(palette, mode, view.maxVoltage, view.maxCurrent, numbers)
                     }
+                    trailing()
+                }
+                if (grip) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .padding(top = 3.dp)
+                            .size(width = 32.dp, height = 4.dp)
+                            .background(LocalContentColor.current.copy(alpha = 0.35f), CircleShape),
+                    )
                 }
             }
-            if (error != null) {
-                Text(
-                    error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 6.dp),
+            // Always this tall, so the bar doesn't shift as runs start and finish.
+            if (running) {
+                LinearProgressIndicator(
+                    Modifier.fillMaxWidth().height(2.dp),
+                    color = MaterialTheme.colorScheme.tertiary,
+                    trackColor = Color.Transparent,
                 )
+            } else {
+                Spacer(Modifier.height(2.dp))
+            }
+            if (error != null) {
+                Row(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.ErrorOutline, contentDescription = "Live simulation failed", Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(error, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelMedium)
+                }
             }
         }
     }
@@ -149,19 +190,14 @@ fun textWidth(template: String, style: TextStyle): Dp {
     return remember(template, style, density) { with(density) { measurer.measure(template, style).size.width.toDp() } }
 }
 
-@Composable
-private fun StatusIcon(content: @Composable () -> Unit) {
-    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { content() }
-}
-
 private fun speedLabel(speed: Float): String =
     if (speed >= 1f) "${speed.roundToInt()}×" else "${(speed * 100).roundToInt() / 100.0}×"
 
 /** Colour scale of the wires: −max…0…+max for voltage, 0…max for current. */
 @Composable
-private fun Legend(palette: LivePalette, mode: LiveColorMode, maxVoltage: Double, maxCurrent: Double, style: TextStyle) {
-    Column(Modifier.padding(horizontal = 4.dp).width(96.dp)) {
-        Canvas(Modifier.width(96.dp).height(8.dp)) {
+private fun Legend(palette: LivePalette, mode: LiveColorMode, maxVoltage: Double, maxCurrent: Double, style: TextStyle, width: Dp) {
+    Column(Modifier.padding(horizontal = 4.dp).width(width)) {
+        Canvas(Modifier.width(width).height(8.dp)) {
             val colors = when (mode) {
                 LiveColorMode.VOLTAGE -> listOf(voltageColor(palette, -1.0), voltageColor(palette, -0.5), palette.neutral, voltageColor(palette, 0.5), voltageColor(palette, 1.0))
                 LiveColorMode.CURRENT -> listOf(palette.neutral, currentColor(palette, 0.01), currentColor(palette, 0.1), currentColor(palette, 1.0))
