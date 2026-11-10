@@ -55,7 +55,8 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-enum class LiveColorMode(val label: String) { VOLTAGE("Voltage"), CURRENT("Current") }
+/** What the wires' colours show; [short] is the label where there is no room for [label]. */
+enum class LiveColorMode(val label: String, val short: String) { VOLTAGE("Voltage", "V"), CURRENT("Current", "I") }
 
 /**
  * Plays a [LiveView] back: a transient loops in slow motion (the whole run takes

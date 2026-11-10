@@ -17,6 +17,7 @@ import io.github.l0gic0l.pepperjack.sim.LiveReadout
 import io.github.l0gic0l.pepperjack.sim.LiveTrace
 import io.github.l0gic0l.pepperjack.sim.LiveView
 import io.github.l0gic0l.pepperjack.sim.Quantity
+import io.github.l0gic0l.pepperjack.ui.editor.toolbarButtonSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -26,6 +27,20 @@ import kotlin.math.sin
 
 class LiveControlsTest {
     private fun part(kind: PartKind, value: String) = Part(1, kind, "X1", 0, 0, value = value)
+
+    @Test
+    fun toolbarButtonsNarrowToFitAPhone() {
+        // Full size where there is room for eight of them, the divider and the padding.
+        assertEquals(48.dp, toolbarButtonSize(600.dp))
+        // A 411 dp phone leaves the toolbar 395 dp, a 360 dp one 344 dp: all of it fits both.
+        for (width in listOf(395.dp, 344.dp)) {
+            val size = toolbarButtonSize(width)
+            assertTrue("$size across $width", size * 8 + 21.dp <= width)
+            assertTrue("$size is too small to hit", size >= 40.dp)
+        }
+        // Never so narrow that they can't be hit: below that the toolbar scrolls.
+        assertEquals(36.dp, toolbarButtonSize(200.dp))
+    }
 
     @Test
     fun controlsListKnobsAndSwitchesInSheetOrder() {

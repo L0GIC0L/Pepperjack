@@ -16,6 +16,8 @@ data class Settings(
     val dynamicColor: Boolean = true,
     val dialect: SpiceDialect = SpiceDialect.Default,
     val showGrid: Boolean = true,
+    /** The hint over the sheet in live mode, until it has been read. */
+    val liveHint: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
@@ -25,6 +27,7 @@ class SettingsRepository(private val context: Context) {
     private val dynamicKey = booleanPreferencesKey("dynamic_color")
     private val dialectKey = stringPreferencesKey("dialect")
     private val gridKey = booleanPreferencesKey("show_grid")
+    private val liveHintKey = booleanPreferencesKey("live_hint")
 
     val settings: Flow<Settings> = context.dataStore.data.map { prefs ->
         Settings(
@@ -33,6 +36,7 @@ class SettingsRepository(private val context: Context) {
             dialect = prefs[dialectKey]?.let { runCatching { SpiceDialect.valueOf(it) }.getOrNull() }
                 ?: SpiceDialect.Default,
             showGrid = prefs[gridKey] ?: true,
+            liveHint = prefs[liveHintKey] ?: true,
         )
     }
 
@@ -40,4 +44,5 @@ class SettingsRepository(private val context: Context) {
     suspend fun setDynamicColor(enabled: Boolean) = context.dataStore.edit { it[dynamicKey] = enabled }
     suspend fun setDialect(dialect: SpiceDialect) = context.dataStore.edit { it[dialectKey] = dialect.name }
     suspend fun setShowGrid(enabled: Boolean) = context.dataStore.edit { it[gridKey] = enabled }
+    suspend fun setLiveHint(enabled: Boolean) = context.dataStore.edit { it[liveHintKey] = enabled }
 }
