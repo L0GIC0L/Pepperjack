@@ -17,6 +17,7 @@ import io.github.l0gic0l.pepperjack.model.PartKind.RELAY
 import io.github.l0gic0l.pepperjack.model.PartKind.RESISTOR
 import io.github.l0gic0l.pepperjack.model.PartKind.SCR
 import io.github.l0gic0l.pepperjack.model.PartKind.SPST
+import io.github.l0gic0l.pepperjack.model.PartKind.SWITCH
 import io.github.l0gic0l.pepperjack.model.PartKind.TEXT
 import io.github.l0gic0l.pepperjack.model.PartKind.TRANSFORMER
 import io.github.l0gic0l.pepperjack.model.PartKind.UJT
@@ -278,16 +279,25 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     // ---- Added for the simulation: the panel meters, two 6 A loads (both on is the full
     // 12 A) and a short circuit to switch in.
     p(LCD_AMMETER, "IOUT", 230, 32)
-    w(230, 36, 242, 36)
-    p(SPST, "LOAD1", 230, 36, value = "open")
-    p(RESISTOR, "RL1", 230, 40, value = "2.5")
-    w(230, 44, 230, 56)
-    p(SPST, "LOAD2", 236, 36, value = "open")
-    p(RESISTOR, "RL2", 236, 40, value = "2.5")
-    w(236, 44, 236, 56)
-    p(SPST, "SHORT", 242, 36, value = "open")
-    p(RESISTOR, "RS", 242, 40, value = "10m")
-    w(242, 44, 242, 56)
+    // Live mode starts every run from cold, so a load switched in at the start would never let
+    // the output rise and K1 pull in. SAPPLY connects the loads 30 ms in (VAPPLY steps), once
+    // the supply is up, as if they were switched on at the bench.
+    w(230, 36, 230, 38)
+    p(SWITCH, "SAPPLY", 230, 38, value = "APPLY", mirrored = true)
+    w(232, 39, 232, 37, 237, 37)
+    p(VOLTAGE, "VAPPLY", 237, 37, value = "PULSE(0 1 30m)")
+    w(230, 42, 230, 44, 242, 44)
+    w(232, 41, 232, 44)
+    w(237, 41, 237, 44)
+    p(SPST, "LOAD1", 230, 44, value = "open")
+    p(RESISTOR, "RL1", 230, 48, value = "2.5")
+    w(230, 52, 230, 56)
+    p(SPST, "LOAD2", 236, 44, value = "open")
+    p(RESISTOR, "RL2", 236, 48, value = "2.5")
+    w(236, 52, 236, 56)
+    p(SPST, "SHORT", 242, 44, value = "open")
+    p(RESISTOR, "RS", 242, 48, value = "10m")
+    w(242, 52, 242, 56)
     p(LCD_VOLTMETER, "VOUT", 248, 32)
     w(248, 36, 248, 56)
 
@@ -310,9 +320,11 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     )
     p(
         TEXT, "TXT3", 136, 60,
-        value = "Added for the simulation: LOAD1 and LOAD2 (6 A each),\n" +
-            "SHORT, the IOUT and VOUT panel meters, and lamps on\n" +
-            "K1's contacts: green DS2 above the low limit, red DS3 below.\n" +
+        value = "Added for the simulation: LOAD1 and LOAD2 (6 A each) and\n" +
+            "SHORT, which SAPPLY connects 30 ms into each run, once the\n" +
+            "supply is up and K1 is in; the IOUT and VOUT panel meters;\n" +
+            "and lamps on K1's contacts: green DS2 above the low limit,\n" +
+            "red DS3 below it.\n" +
             "Only the crowbar switches the output off. Below 12.5 V,\n" +
             "K1 drops out to tell the system on J1, and the current\n" +
             "limit folds back (Figure 10) to 3 A into a short.\n" +
@@ -327,6 +339,6 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
         AnalysisConfig(AnalysisType.TRAN, tranStop = "100m", tranStep = "20u", tranMaxStep = "20u", tranUic = true),
         // Gear integration: trapezoidal rings from step to step in the current limit's
         // feedback, which takes the run ten times as long for no difference in the result.
-        ".options abstol=1n method=gear",
+        ".options abstol=1n method=gear\n.model APPLY SW(Ron=1m Roff=1G Vt=0.5 Vh=0.1)",
     )
 }

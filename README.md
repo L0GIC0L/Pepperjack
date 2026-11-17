@@ -153,7 +153,10 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   out below 12.5 V. As in the original, only the crowbar takes the output down:
   the relay's contacts only signal the system, and the current limit folds back
   along the manual's Figure 10 to 3 A into a short. Its test points A–J read the manual's voltage table at no
-  load and at 6 A. Switch in LOAD1 and LOAD2 (6 A each) or SHORT in live mode;
+  load and at 6 A. Switch in LOAD1 and LOAD2 (6 A each) or SHORT in live mode:
+  they connect 30 ms into each run, once the output is up and K1 has pulled in,
+  so an overload shows K1 dropping out (the green lamp goes out, the red one
+  lights);
   the trimmers are R22 (output), R15 (current limit), R29 (high limit) and R36
   (low limit). T1's ratings aren't listed, so 118 V : 25.3 V is chosen to match
   test point A, and a 9 V relay stands in for the mercury-wetted K1.
