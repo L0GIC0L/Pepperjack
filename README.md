@@ -150,7 +150,9 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   from the manual's parts list: a bridge into 28,000 µF, four 2N3771s, a
   discrete error amplifier on a 1N825 reference, foldback current limit, a
   2N2646 UJT that fires a 2N681 SCR crowbar at 17.5 V, and a relay that drops
-  out below 12.5 V. Its test points A–J read the manual's voltage table at no
+  out below 12.5 V. As in the original, only the crowbar takes the output down:
+  the relay's contacts only signal the system, and the current limit folds back
+  along the manual's Figure 10 to 3 A into a short. Its test points A–J read the manual's voltage table at no
   load and at 6 A. Switch in LOAD1 and LOAD2 (6 A each) or SHORT in live mode;
   the trimmers are R22 (output), R15 (current limit), R29 (high limit) and R36
   (low limit). T1's ratings aren't listed, so 118 V : 25.3 V is chosen to match

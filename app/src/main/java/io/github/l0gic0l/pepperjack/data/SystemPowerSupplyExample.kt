@@ -311,8 +311,11 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     p(
         TEXT, "TXT3", 136, 60,
         value = "Added for the simulation: LOAD1 and LOAD2 (6 A each),\n" +
-            "SHORT, the IOUT and VOUT panel meters, and DS2/DS3 on\n" +
-            "K1's contacts (which go out on J1).\n" +
+            "SHORT, the IOUT and VOUT panel meters, and lamps on\n" +
+            "K1's contacts: green DS2 above the low limit, red DS3 below.\n" +
+            "Only the crowbar switches the output off. Below 12.5 V,\n" +
+            "K1 drops out to tell the system on J1, and the current\n" +
+            "limit folds back (Figure 10) to 3 A into a short.\n" +
             "Not drawn: K1's second pole (R39, C6), the test jacks\n" +
             "J3–J11 (R26, R27), and J1's jumpers.\n" +
             "K1 is a mercury-wetted HGS2MT-5705; a 9 V relay stands in.\n" +
