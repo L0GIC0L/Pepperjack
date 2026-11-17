@@ -137,7 +137,8 @@ private fun TrayTile(choice: PartChoice, title: String, onTap: () -> Unit, drag:
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .width(76.dp)
+            // Wide enough that the longest one-word names ("Potentiometer") stay on one line.
+            .width(92.dp)
             .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(16.dp))
             .onGloballyPositioned { coordinates = it }
             .semantics {
@@ -183,7 +184,7 @@ private fun TrayTile(choice: PartChoice, title: String, onTap: () -> Unit, drag:
                     }
                 }
             }
-            .padding(6.dp),
+            .padding(horizontal = 4.dp, vertical = 6.dp),
     ) {
         Canvas(Modifier.size(44.dp)) { drawSchematicPreview(sheet, colors, textMeasurer) }
         Text(

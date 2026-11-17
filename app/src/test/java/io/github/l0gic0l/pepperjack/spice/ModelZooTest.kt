@@ -140,6 +140,32 @@ object ModelZoo {
                 part(PartKind.RESISTOR, "R2", "vcc", "c", value = "1k")
                 part(PartKind.OPTO, "U1", "a", "0", "c", "0", value = model.name)
             }
+            ModelFamily.SCR -> {
+                // The supply ramps (an SCR can latch in a DC operating point), then a gate pulse fires it.
+                part(PartKind.VOLTAGE, "V1", "vcc", "0", value = "PWL(0 0 0.2m 12)")
+                part(PartKind.RESISTOR, "R1", "vcc", "a", value = "100")
+                part(PartKind.VOLTAGE, "V2", "in", "0", value = "PULSE(0 5 0.5m 1u 1u 50u 1)")
+                part(PartKind.RESISTOR, "R2", "in", "g", value = "330")
+                part(PartKind.SCR, "SCR1", "a", "0", "g", value = model.name)
+            }
+            ModelFamily.UJT -> {
+                // A relaxation oscillator.
+                part(PartKind.VOLTAGE, "V1", "vcc", "0", value = "DC 12")
+                part(PartKind.RESISTOR, "R1", "vcc", "e", value = "22k")
+                part(PartKind.CAPACITOR, "C1", "e", "0", value = "100n")
+                part(PartKind.RESISTOR, "R2", "vcc", "b2", value = "470")
+                part(PartKind.RESISTOR, "R3", "b1", "0", value = "47")
+                part(PartKind.UJT, "Q1", "e", "b2", "b1", value = model.name)
+            }
+            ModelFamily.RELAY -> {
+                val volts = model.name.substringAfterLast('-').toDouble()
+                part(PartKind.VOLTAGE, "V1", "coil", "0", value = "PULSE(0 ${volts.toInt()} 0.2m 10u 10u 1m 2m)")
+                part(PartKind.VOLTAGE, "V2", "vcc", "0", value = "DC 5")
+                part(PartKind.RESISTOR, "R1", "vcc", "com", value = "1k")
+                part(PartKind.RESISTOR, "R2", "no", "0", value = "1k")
+                part(PartKind.RESISTOR, "R3", "nc", "0", value = "1k")
+                part(PartKind.RELAY, "K1", "coil", "0", "com", "no", "nc", value = model.name)
+            }
             ModelFamily.CRYSTAL -> {
                 part(PartKind.VOLTAGE, "V1", "in", "0", value = "PULSE(0 1 0 1n 1n 10n 1u)")
                 part(PartKind.RESISTOR, "R1", "in", "a", value = "1k")

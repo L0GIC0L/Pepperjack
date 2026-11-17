@@ -21,6 +21,9 @@ enum class ModelFamily(val title: String) {
     REGULATOR_ADJ("Adjustable regulators"),
     TIMER("555 timers"),
     OPTO("Optocouplers"),
+    SCR("Thyristors (SCRs)"),
+    UJT("Unijunction transistors"),
+    RELAY("Relays"),
     CRYSTAL("Crystals"),
     SWITCH("Switch models"),
     LOGIC("Digital logic (XSPICE)"),
@@ -73,7 +76,7 @@ object SpiceModels {
     const val OPAMP = "PJ_OPAMP"
 
     private val all: Map<String, SpiceModel> by lazy {
-        (discretes() + opAmps() + comparators() + regulators() + timers() + optos() + crystals() + logic())
+        (discretes() + opAmps() + comparators() + regulators() + timers() + optos() + thyristors() + unijunctions() + relays() + crystals() + logic())
             .associateBy { it.name.uppercase(Locale.ROOT) }
     }
 
@@ -102,8 +105,12 @@ object SpiceModels {
         add(card("1N4148", d, "Fast signal diode, 100 V, 200 mA, 4 ns", "D", "IS=4.352n N=1.906 RS=0.6458 BV=110 IBV=100u CJO=0.7048p VJ=0.869 M=0.03 FC=0.5 TT=3.48n"))
         add(card("FD333", d, "Low-leakage signal diode, picoamp reverse current", "D", "IS=10f N=1 RS=5 BV=125 IBV=1n CJO=3p VJ=0.7 M=0.3 TT=10n"))
         add(card("1N914", d, "Fast signal diode, 100 V, 200 mA", "D", "IS=2.52n N=1.752 RS=0.568 BV=100 IBV=100u CJO=4p VJ=0.75 M=0.4 TT=20n"))
+        add(card("1N4143", d, "Logic diode, 100 V, 200 mA (a 1N914 type)", "D", "IS=2.52n N=1.752 RS=0.568 BV=100 IBV=100u CJO=4p VJ=0.75 M=0.4 TT=20n"))
         add(card("1N4001", d, "Rectifier, 50 V, 1 A", "D", "IS=7.02767n N=1.80803 RS=34.15m EG=1.05743 XTI=5 BV=50 IBV=5u CJO=10p VJ=0.7 M=0.5 FC=0.5 TT=100n"))
         add(card("1N4007", d, "Rectifier, 1000 V, 1 A", "D", "IS=7.02767n N=1.80803 RS=34.15m EG=1.05743 XTI=5 BV=1000 IBV=5u CJO=10p VJ=0.7 M=0.5 FC=0.5 TT=100n"))
+        add(card("1N3193", d, "Rectifier, 200 V, 0.75 A", "D", "IS=5n N=1.8 RS=40m BV=200 IBV=5u CJO=15p VJ=0.7 M=0.5 TT=1u"))
+        add(card("1N1187A", d, "Stud rectifier, 300 V, 35 A, 1.1 V at 35 A", "D", "IS=50n N=1.8 RS=5m BV=300 IBV=10u CJO=500p VJ=0.7 M=0.5 TT=5u"))
+        add(card("1N1187RA", d, "Stud rectifier, 300 V, 35 A, reverse polarity (anode to stud)", "D", "IS=50n N=1.8 RS=5m BV=300 IBV=10u CJO=500p VJ=0.7 M=0.5 TT=5u"))
         add(card("1N5408", d, "Rectifier, 1000 V, 3 A", "D", "IS=63n N=1.7 RS=14.1m BV=1000 IBV=10u CJO=53p VJ=0.34 M=0.45 TT=4.32u"))
 
         val s = ModelFamily.SCHOTTKY
@@ -121,10 +128,11 @@ object SpiceModels {
             Triple("1N4740A", 10.0, 25e-3), Triple("1N4742A", 12.0, 21e-3), Triple("1N4744A", 15.0, 17e-3),
             Triple("1N4746A", 18.0, 14e-3), Triple("1N4750A", 27.0, 9.5e-3),
             Triple("1N5231B", 5.1, 20e-3), Triple("1N5242B", 12.0, 20e-3),
+            Triple("1N747A", 3.6, 20e-3), Triple("1N751A", 5.1, 20e-3), Triple("1N959B", 8.2, 15e-3),
         ).forEach { (name, vz, izt) ->
             val zzt = zenerImpedance.getValue(name)
             val rs = 0.8 * zzt
-            val watts = if (name.startsWith("1N52")) "0.5 W" else "1 W"
+            val watts = if (name.startsWith("1N47")) "1 W" else "0.5 W"
             val cjo = maxOf(20.0, 200.0 * 5.1 / vz)
             add(
                 card(
@@ -135,6 +143,8 @@ object SpiceModels {
         }
         // Back-compat names from the first release.
         add(card("1N4733", ModelFamily.ZENER, "5.1 V zener, 1 W", "D", "IS=1n N=1.5 RS=1 BV=5.1 IBV=49m CJO=200p VJ=0.75 M=0.33"))
+        add(card("1N825", ModelFamily.ZENER, "6.2 V temperature-compensated reference, specified at 7.5 mA", "D", "IS=10p N=1.5 RS=12 BV=6.11 IBV=7.5m NBV=1.2 CJO=50p VJ=0.75 M=0.33"))
+        add(card("1N943", ModelFamily.ZENER, "11.7 V temperature-compensated reference, specified at 7.5 mA", "D", "IS=10p N=1.5 RS=24 BV=11.52 IBV=7.5m NBV=1.2 CJO=40p VJ=0.75 M=0.33"))
         add(card("1N4611A", ModelFamily.ZENER, "6.6 V low-current reference zener, specified at 250 µA", "D", "IS=10p N=1.5 RS=40 BV=6.59 IBV=250u NBV=1.2 CJO=30p VJ=0.75 M=0.33"))
         add(card("1N4742", ModelFamily.ZENER, "12 V zener, 1 W", "D", "IS=1n N=1.5 RS=2 BV=12 IBV=21m CJO=80p VJ=0.75 M=0.33"))
         // A TL431 with its REF pin tied to the cathode is a 2.495 V precision "zener"; on the
@@ -172,10 +182,13 @@ object SpiceModels {
         add(card("BD139", n, "Medium power, 80 V, 1.5 A, hFE 40–250", "NPN", "IS=0.1p NF=1 BF=200 VAF=100 IKF=0.8 ISE=0.1p NE=1.5 BR=10 NC=2 RB=1 RE=0.05 RC=0.1 CJE=100p VJE=0.75 MJE=0.4 CJC=20p VJC=0.7 MJC=0.4 TF=0.8n TR=100n XTB=1.5"))
         add(card("TIP31C", n, "Power, 100 V, 3 A, hFE 25+ at 1 A", "NPN", "IS=2p NF=1 BF=120 VAF=100 IKF=1.2 ISE=2p NE=1.5 BR=5 NC=2 RB=1 RE=0.05 RC=0.1 CJE=300p VJE=0.75 MJE=0.4 CJC=90p VJC=0.7 MJC=0.4 TF=25n TR=500n XTB=1.5"))
         add(card("TIP41C", n, "Power, 100 V, 6 A, hFE 15–75 at 3 A", "NPN", "IS=5p NF=1 BF=100 VAF=100 IKF=2.5 ISE=5p NE=1.5 BR=5 NC=2 RB=0.5 RE=0.03 RC=0.05 CJE=500p VJE=0.75 MJE=0.4 CJC=150p VJC=0.7 MJC=0.4 TF=30n TR=500n XTB=1.5"))
+        add(card("2N3771", n, "Power, 40 V, 30 A, 150 W, hFE 15–60 at 15 A", "NPN", "IS=50p BF=60 VAF=100 IKF=10 ISE=50p NE=1.5 BR=5 NC=2 RB=0.3 RE=5m RC=10m CJE=2n VJE=0.75 MJE=0.4 CJC=600p VJC=0.7 MJC=0.4 TF=400n TR=2u XTB=1.5"))
+        add(card("2N2270", n, "Medium power TO-5, 60 V, 1 A, hFE 50–200", "NPN", "IS=20f BF=150 VAF=100 IKF=0.5 ISE=20f NE=1.3 BR=5 NC=2 RB=5 RC=0.3 CJE=25p CJC=8p TF=1.5n TR=50n XTB=1.5"))
         add(card("2N3055", n, "Power, 60 V, 15 A, hFE 20–70 at 4 A", "NPN", "IS=10p NF=1 BF=80 VAF=100 IKF=5 ISE=10p NE=1.5 BR=5 NC=2 RB=0.5 RE=0.01 RC=0.03 CJE=1n VJE=0.75 MJE=0.4 CJC=300p VJC=0.7 MJC=0.4 TF=60n TR=1u XTB=1.5"))
         add(darlington("TIP120", npn = true))
 
         val p = ModelFamily.PNP
+        add(card("2N4036", p, "Medium power TO-5, −65 V, −1 A, hFE 40–140", "PNP", "IS=50f BF=100 VAF=100 IKF=0.5 ISE=50f NE=1.4 BR=4 NC=2 RB=5 RC=0.3 CJE=60p CJC=20p TF=3n TR=60n XTB=1.5"))
         add(card("2N3906", p, "General purpose, 40 V, 200 mA, hFE 100–300", "PNP", "IS=1.41f XTI=3 EG=1.11 VAF=18.7 BF=180.7 NE=1.5 ISE=0 IKF=80m XTB=1.5 BR=4.977 NC=2 ISC=0 IKR=0 RC=2.5 CJC=9.728p MJC=0.5776 VJC=0.75 FC=0.5 CJE=8.063p MJE=0.3677 VJE=0.75 TR=33.42n TF=179.3p ITF=0.4 VTF=4 XTF=6 RB=10"))
         add(card("2N2907", p, "General purpose, 60 V, 600 mA, hFE 100–300", "PNP", "IS=650f NF=1 BF=250 VAF=100 IKF=0.3 ISE=650f NE=1.5 BR=6 NC=2 RB=10 RC=0.5 CJE=20p VJE=0.75 MJE=0.4 CJC=8p VJC=0.75 MJC=0.45 TF=0.5n TR=40n XTB=1.5"))
         add(card("BC557B", p, "Low noise, 45 V, 100 mA, hFE 200–450", "PNP", "IS=38.3f NF=0.9872 ISE=12.2f NE=1.4 BF=290 IKF=0.15 VAF=21.11 NR=0.9902 ISC=112f NC=1.2 BR=6.1 IKR=0.08 VAR=20 RB=1 RE=0.69 RC=0.5 CJE=17.9p VJE=0.6 MJE=0.39 TF=0.6n CJC=9.7p VJC=0.48 MJC=0.37 TR=100n"))
@@ -223,6 +236,7 @@ object SpiceModels {
         "1N4728A" to 10.0, "1N4732A" to 8.0, "1N4733A" to 7.0, "1N4734A" to 5.0, "1N4735A" to 2.0,
         "1N4739A" to 5.0, "1N4740A" to 7.0, "1N4742A" to 9.0, "1N4744A" to 14.0, "1N4746A" to 20.0,
         "1N4750A" to 35.0, "1N5231B" to 17.0, "1N5242B" to 30.0,
+        "1N747A" to 24.0, "1N751A" to 17.0, "1N959B" to 6.5,
     )
 
     private fun darlington(name: String, npn: Boolean): SpiceModel {
@@ -490,6 +504,114 @@ object SpiceModels {
     private fun optos() = listOf(
         opto("PC817", "Phototransistor output, CTR ≈ 110% at 10 mA", 0.0115),
         opto("4N35", "Phototransistor output, CTR ≈ 85% at 10 mA", 0.0088),
+    )
+
+    // ---- thyristors ----
+
+    /**
+     * An SCR as its two-transistor equivalent: a PNP and an NPN that latch once the gate
+     * pulls enough current through [rgk] (the gate-cathode shunt) to turn the NPN on, and
+     * stay latched while the anode current keeps it so. [rgk] sets the gate trigger current
+     * (about 0.6 V / rgk) and the holding current; [area] scales the on-state voltage.
+     */
+    private fun scr(name: String, description: String, rgk: Double, area: Double) = SpiceModel(
+        name, ModelFamily.SCR, description,
+        """
+        |.subckt $name a k g
+        |* Anode-gate PNP and gate-cathode NPN: regenerative once alpha1 + alpha2 reaches 1
+        |Q1 g1 n1 a PJSCRP ${fmt(area)}
+        |Q2 n1 g1 k PJSCRN ${fmt(area)}
+        |Rg g g1 5
+        |Rgk g1 k ${fmt(rgk)}
+        |.model PJSCRP PNP(IS=1e-11 BF=1.5 BR=0.5 IKF=5 RE=0.4 RC=0.1 CJE=20p CJC=10p TF=1u TR=5u)
+        |.model PJSCRN NPN(IS=1e-11 BF=100 BR=1 IKF=5 RE=0.4 RC=0.1 CJE=50p CJC=10p TF=500n TR=5u)
+        |.ends $name
+        """.trimMargin(),
+    )
+
+    private fun thyristors() = listOf(
+        scr("2N681", "25 A, 50 V stud; gate trigger about 13 mA, holding about 25 mA", 47.0, 10.0),
+        scr("2N6504", "25 A, 50 V; gate trigger 9 mA, holding 18 mA, 1.2 V at 7 A", 100.0, 10.0),
+        scr("C106D", "4 A, 400 V, sensitive gate: trigger 0.2 mA, holding 1 mA", 3000.0, 2.0),
+        scr("2N5064", "0.8 A, 200 V, sensitive gate in TO-92: trigger 0.2 mA, holding 1 mA", 3000.0, 0.5),
+    )
+
+    // ---- unijunction transistors ----
+
+    /**
+     * A unijunction transistor: an interbase divider (ratio [eta], [rbb] in all), and an
+     * emitter diode into its tap. Emitter current shrinks the lower half (conductivity
+     * modulation, with a carrier lifetime of 0.5 µs), so once the emitter passes the peak
+     * point, eta × Vbb + Vd, it snaps on and dumps into B1 until the current falls below the
+     * valley current, about [valley] at 10 V across the bases. Only conduction current, not the
+     * junction's displacement current, modulates the base, so it can't trigger itself.
+     */
+    private fun ujt(name: String, description: String, eta: Double, rbb: Double, valley: Double): SpiceModel {
+        val rb1 = eta * rbb
+        val rb2 = rbb - rb1
+        val rmin = 20.0
+        // Valley: Iv² ≈ rb1 · i0 · Vbb / (rb2 · rmin) at Vbb = 10 V.
+        val i0 = valley * valley * rb2 * rmin / (rb1 * 10.0)
+        return SpiceModel(
+            name, ModelFamily.UJT, description,
+            """
+            |.subckt $name e b2 b1
+            |Rb2 b2 g ${fmt(rb2)}
+            |Vs e e1 0
+            |D1 e1 g PJUJTD
+            |* Emitter current, low-passed (0.5 us): it modulates RB1
+            |Fq 0 q Vs 1
+            |Rq q 0 1
+            |Cq q 0 0.5u
+            |Bb1 g b1 I=V(g,b1)/(${fmt(rmin)}+${fmt(rb1)}/(1+max(V(q),0)/${fmt(i0)}))
+            |Cg g b1 20p
+            |Ce e b1 10p
+            |.model PJUJTD D(IS=1e-14 N=1.5 RS=5)
+            |.ends $name
+            """.trimMargin(),
+        )
+    }
+
+    private fun unijunctions() = listOf(
+        ujt("2N2646", "η 0.56–0.75 (0.66), Rbb 7 kΩ, peak 1 µA, valley 5 mA", 0.66, 7000.0, 5e-3),
+        ujt("2N2647", "η 0.68–0.82 (0.75), Rbb 7 kΩ, peak 1 µA, valley 10 mA", 0.75, 7000.0, 10e-3),
+    )
+
+    // ---- relays ----
+
+    /**
+     * An SPDT relay: the coil's resistance and inductance, and a changeover contact (COM to NC
+     * at rest, to NO when energized) that follows the coil current, with the datasheet's
+     * hysteresis: it operates at 75% of the rated current and releases below 10%.
+     */
+    private fun relay(name: String, volts: Double, ohms: Double): SpiceModel {
+        val rated = volts / ohms
+        val operate = 0.75 * rated
+        val release = 0.10 * rated
+        // Inductance for a coil time constant of about 3 ms.
+        val henries = ohms * 3e-3
+        return SpiceModel(
+            name, ModelFamily.RELAY,
+            "SPDT, ${fmt(volts)} V coil, ${fmt(ohms)} Ω; operates at ${fmt(0.75 * volts)} V, releases at ${fmt(0.1 * volts)} V",
+            """
+            |.subckt $name c1 c2 com no nc
+            |L1 c1 x ${fmt(henries)}
+            |R1 x y ${fmt(ohms)}
+            |Vs y c2 0
+            |W1 com no Vs PJRLYNO
+            |W2 com nc Vs PJRLYNC
+            |.model PJRLYNO csw(it=${fmt((operate + release) / 2)} ih=${fmt((operate - release) / 2)} ron=50m roff=1G)
+            |.model PJRLYNC csw(it=${fmt((operate + release) / 2)} ih=${fmt((operate - release) / 2)} ron=1G roff=50m)
+            |.ends $name
+            """.trimMargin(),
+        )
+    }
+
+    private fun relays() = listOf(
+        relay("G5LE-1-5", 5.0, 63.0),
+        relay("G5LE-1-9", 9.0, 203.0),
+        relay("G5LE-1-12", 12.0, 360.0),
+        relay("G5LE-1-24", 24.0, 1440.0),
     )
 
     // ---- crystals ----

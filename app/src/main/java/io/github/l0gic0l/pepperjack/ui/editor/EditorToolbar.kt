@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -48,6 +49,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.bounds
@@ -65,11 +67,12 @@ private fun WithTooltip(text: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ToolButton(icon: ImageVector, label: String, checked: Boolean, onClick: () -> Unit) {
+private fun ToolButton(icon: ImageVector, label: String, checked: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     WithTooltip(label) {
         IconToggleButton(
             checked = checked,
             onCheckedChange = { onClick() },
+            modifier = modifier,
             colors = IconButtonDefaults.iconToggleButtonColors(
                 checkedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                 checkedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -79,11 +82,21 @@ private fun ToolButton(icon: ImageVector, label: String, checked: Boolean, onCli
 }
 
 @Composable
-private fun ActionButton(icon: ImageVector, label: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun ActionButton(icon: ImageVector, label: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
     WithTooltip(label) {
-        IconButton(onClick = onClick, enabled = enabled) { Icon(icon, contentDescription = label) }
+        IconButton(onClick = onClick, enabled = enabled, modifier = modifier) { Icon(icon, contentDescription = label) }
     }
 }
+
+/** The toolbar's buttons, its divider and its padding, for [toolbarButtonSize]. */
+private const val TOOLBAR_BUTTONS = 8
+private val TOOLBAR_EXTRAS = 21.dp
+
+/**
+ * How big the toolbar's buttons can be for all of it to fit across [width]: full size where
+ * there is room, down to 36 dp on a narrow phone (below that, the toolbar scrolls).
+ */
+fun toolbarButtonSize(width: Dp): Dp = ((width - TOOLBAR_EXTRAS) / TOOLBAR_BUTTONS).coerceIn(36.dp, 48.dp)
 
 /** Floating tool palette at the bottom of the schematic, in the spirit of M3 floating toolbars. */
 @Composable
@@ -96,6 +109,8 @@ fun EditorToolbar(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     modifier: Modifier = Modifier,
+    /** See [toolbarButtonSize]. */
+    buttonSize: Dp = 48.dp,
 ) {
     Surface(
         shape = RoundedCornerShape(28.dp),
@@ -108,17 +123,19 @@ fun EditorToolbar(
             Modifier.padding(horizontal = 6.dp, vertical = 4.dp).horizontalScroll(rememberScrollState()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ToolButton(Icons.Outlined.NearMe, "Select and move", tool == Tool.SELECT) { onTool(Tool.SELECT) }
-            ToolButton(Icons.Outlined.HighlightAlt, "Select several", tool == Tool.AREA) { onTool(Tool.AREA) }
-            ToolButton(Icons.Outlined.Timeline, "Draw wires", tool == Tool.WIRE) { onTool(Tool.WIRE) }
+            // Narrower than a finger's 48 dp only where the screen is; still that tall.
+            val size = Modifier.size(width = buttonSize, height = 48.dp)
+            ToolButton(Icons.Outlined.NearMe, "Select and move", tool == Tool.SELECT, size) { onTool(Tool.SELECT) }
+            ToolButton(Icons.Outlined.HighlightAlt, "Select several", tool == Tool.AREA, size) { onTool(Tool.AREA) }
+            ToolButton(Icons.Outlined.Timeline, "Draw wires", tool == Tool.WIRE, size) { onTool(Tool.WIRE) }
             WithTooltip("Add part") {
-                FilledIconButton(onClick = onParts) { Icon(Icons.Outlined.Add, contentDescription = "Add part") }
+                FilledIconButton(onClick = onParts, modifier = size) { Icon(Icons.Outlined.Add, contentDescription = "Add part") }
             }
-            ToolButton(Icons.AutoMirrored.Outlined.ShowChart, "Probe voltages and currents", tool == Tool.PROBE) { onTool(Tool.PROBE) }
-            ToolButton(Icons.Outlined.ContentCut, "Delete", tool == Tool.DELETE) { onTool(Tool.DELETE) }
+            ToolButton(Icons.AutoMirrored.Outlined.ShowChart, "Probe voltages and currents", tool == Tool.PROBE, size) { onTool(Tool.PROBE) }
+            ToolButton(Icons.Outlined.ContentCut, "Delete", tool == Tool.DELETE, size) { onTool(Tool.DELETE) }
             VerticalDivider(Modifier.padding(horizontal = 4.dp).height(24.dp))
-            ActionButton(Icons.AutoMirrored.Outlined.Undo, "Undo", canUndo, onUndo)
-            ActionButton(Icons.AutoMirrored.Outlined.Redo, "Redo", canRedo, onRedo)
+            ActionButton(Icons.AutoMirrored.Outlined.Undo, "Undo", canUndo, size, onUndo)
+            ActionButton(Icons.AutoMirrored.Outlined.Redo, "Redo", canRedo, size, onRedo)
         }
     }
 }

@@ -100,6 +100,12 @@ object Examples {
             P,
             live = true,
         ) { triplePowerSupply() },
+        Example(
+            "System power supply (E92-331)",
+            "A 1970s 15 V 0–12 A series regulator, part for part: foldback current limit, UJT-fired SCR crowbar, low-voltage relay",
+            P,
+            live = true,
+        ) { systemPowerSupply() },
         // Digital logic
         Example("Half adder (logic gates)", "XOR and AND gates light the sum and carry LEDs", G) { halfAdder() },
         Example("SR latch (NAND gates)", "Set at 0 and 4 ms, reset at 2 ms; the latch holds in between", G) { srLatch() },

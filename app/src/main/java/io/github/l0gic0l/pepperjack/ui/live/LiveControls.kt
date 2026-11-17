@@ -9,12 +9,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -26,8 +23,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -56,7 +51,7 @@ internal fun controlColumns(width: Dp, min: Dp = 260.dp): Int = (width / min).to
 /**
  * A front panel for the sheet: every meter's reading, and every knob and switch, so a big
  * circuit can be worked live without hunting for its parts on the sheet. Knobs turn as they
- * do when selected, from 0% at pin 1 to 100% at pin 2.
+ * do when selected, from 0% at pin 1 to 100% at pin 2. It is the live panel's Controls tab.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -70,14 +65,9 @@ fun LiveControls(
 ) {
     val numbers = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum")
     val names = MaterialTheme.typography.labelLarge
-    // Up to about two fifths of the window; it scrolls beyond that, and folds away.
-    val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
-    val maxHeight = (window * 0.4f).coerceIn(200.dp, 360.dp)
     val nameWidth = textWidth(controls.maxByOrNull { it.ref.length }?.ref ?: "RV1", names)
-    Column(
-        modifier.testTag(LIVE_CONTROLS).heightIn(max = maxHeight).verticalScroll(rememberScrollState()).padding(bottom = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
+    // The panel it sits in gives it its height and scrolls it.
+    Column(modifier.testTag(LIVE_CONTROLS).padding(bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         MeterReadings(schematic, animator, numbers)
         BoxWithConstraints(Modifier.fillMaxWidth()) {
             val columns = controlColumns(maxWidth)

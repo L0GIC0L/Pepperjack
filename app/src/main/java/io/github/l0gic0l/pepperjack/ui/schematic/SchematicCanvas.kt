@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import io.github.l0gic0l.pepperjack.model.GridPoint
@@ -64,13 +65,26 @@ class SchematicViewport {
         private set
     internal var fittedFor = -1
 
+    /**
+     * The view is as it was last fitted: nothing has panned or zoomed it since. While it is,
+     * it is fitted again whenever the sheet's room changes (a panel opens, the screen turns).
+     */
+    internal var untouched = true
+
     val transform: GridTransform get() = GridTransform(scale, offset)
 
     fun requestFit() {
         fitRequests++
     }
 
+    /** Pans the view by [delta] pixels. */
+    fun panBy(delta: Offset) {
+        offset += delta
+        untouched = false
+    }
+
     fun zoomBy(factor: Float, focus: Offset, minScale: Float, maxScale: Float) {
+        untouched = false
         val newScale = (scale * factor).coerceIn(minScale, maxScale)
         val applied = newScale / scale
         offset = focus - (focus - offset) * applied
@@ -102,6 +116,8 @@ fun SchematicCanvas(
     onSelectArea: (GridPoint, GridPoint) -> Unit = { _, _ -> },
     /** The multi-selection was dragged by whole grid steps. */
     onMoveGroup: (Int, Int) -> Unit = { _, _ -> },
+    /** A strip along the bottom that fitting keeps the sheet clear of: the toolbar floats there. */
+    fitClearBottom: Dp = 0.dp,
 ) {
     val colors = LocalCircuitColors.current
     val textMeasurer = rememberTextMeasurer()
@@ -134,11 +150,15 @@ fun SchematicCanvas(
     val analysis = remember(schematic) { analyze(schematic) }
     LaunchedEffect(state.placing) { ghost = null }
     LaunchedEffect(canvasSize, viewport.fitRequests) {
-        if (canvasSize.width > 0f && (viewport.scale == 0f || viewport.fittedFor != viewport.fitRequests)) {
-            val fitted = GridTransform.fit(currentSchematic, canvasSize, maxScale = 28 * density.density, minScale = minScale)
+        if (canvasSize.width > 0f && (viewport.scale == 0f || viewport.fittedFor != viewport.fitRequests || viewport.untouched)) {
+            // Not more than a third of the sheet's room, however short that is.
+            val clear = minOf(fitClearBottom.value * density.density, canvasSize.height / 3f)
+            val room = Size(canvasSize.width, canvasSize.height - clear)
+            val fitted = GridTransform.fit(currentSchematic, room, maxScale = 28 * density.density, minScale = minScale)
             viewport.scale = fitted.scale
             viewport.offset = fitted.offset
             viewport.fittedFor = viewport.fitRequests
+            viewport.untouched = true
         }
     }
 
@@ -210,7 +230,7 @@ fun SchematicCanvas(
                             val zoom = event.calculateZoom()
                             val pan = event.calculatePan()
                             val centroid = event.calculateCentroid(useCurrent = true)
-                            viewport.offset += pan
+                            if (pan != Offset.Zero) viewport.panBy(pan)
                             if (zoom != 1f) viewport.zoomBy(zoom, centroid, minScale, maxScale)
                             event.changes.forEach { it.consume() }
                             continue
@@ -245,7 +265,7 @@ fun SchematicCanvas(
                         }
                         if (moved) {
                             when (mode) {
-                                DragMode.PAN -> viewport.offset += change.position - change.previousPosition
+                                DragMode.PAN -> viewport.panBy(change.position - change.previousPosition)
                                 DragMode.MOVE_PART, DragMode.MOVE_GROUP -> {
                                     val g = viewport.transform.toGrid(change.position)
                                     dragDelta = GridPoint((g.x - downGrid.x).roundToInt(), (g.y - downGrid.y).roundToInt())

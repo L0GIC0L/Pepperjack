@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.GridOn
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.Palette
@@ -90,6 +91,15 @@ fun SettingsScreen(container: AppContainer, settings: Settings) {
                     Switch(checked = settings.showGrid, onCheckedChange = { scope.launch { repo.setShowGrid(it) } })
                 },
                 modifier = Modifier.clickableRow { scope.launch { repo.setShowGrid(!settings.showGrid) } },
+            )
+            ListItem(
+                leadingContent = { Icon(Icons.Outlined.Bolt, null) },
+                headlineContent = { Text("Live mode hint") },
+                supportingContent = { Text("Show what can be done on the sheet while live simulating") },
+                trailingContent = {
+                    Switch(checked = settings.liveHint, onCheckedChange = { scope.launch { repo.setLiveHint(it) } })
+                },
+                modifier = Modifier.clickableRow { scope.launch { repo.setLiveHint(!settings.liveHint) } },
             )
 
             SectionHeader("Default SPICE dialect")
