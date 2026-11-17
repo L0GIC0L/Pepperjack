@@ -97,14 +97,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   the plots update too.
 
 **Schematic editor**
-- 49 symbols:
+- 52 symbols:
   - Passives: R, L, C, potentiometer, transformer, crystal.
   - Sources: voltage and current sources (DC, AC, sine, pulse, any SPICE
     source).
-  - Switches and meters: toggle and changeover switches, ammeter, voltmeter,
-    LCD ammeter and voltmeter, measurement probe.
+  - Switches and meters: toggle and changeover switches, relay, ammeter,
+    voltmeter, LCD ammeter and voltmeter, measurement probe.
   - Semiconductors: diode, Schottky, zener, LED, NPN, PNP, N/P JFETs, N/P
-    MOSFETs.
+    MOSFETs, SCR, unijunction transistor.
   - ICs: ideal op-amp, op-amp, comparator, fixed and adjustable regulators,
     555 timer, optocoupler.
   - Digital logic: AND, NAND, OR, NOR, XOR, inverter, Schmitt inverter, D
@@ -120,12 +120,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - LM393/LM311 comparators.
   - 78xx/79xx, LM317/LM337 and LDO regulators, and the TL431 reference.
   - NE555/TLC555, PC817/4N35, and crystals.
+  - SCRs (2N681, 2N6504, C106D, 2N5064), 2N2646/2N2647 unijunctions, and 5–24 V
+    relays.
 
   Discretes use datasheet-typical parameters. ICs are behavioural
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
-- 50 examples in ten categories, searchable, with the ones made for live mode
+- 51 examples in ten categories, searchable, with the ones made for live mode
   marked: basics (divider, Kirchhoff, Wheatstone bridge, RC and RL steps),
   filters (RC, RLC, Sallen-Key, twin-T notch), diodes (half-wave and bridge
   rectifiers, zener regulator, clipper, clamp, doubler), transistors
@@ -134,7 +136,7 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   integrator, instrumentation amplifier, Schmitt trigger, precision
   rectifier), oscillators (555 astable and one-shot, two-transistor astable,
   relaxation, Wien bridge), power (7805, LM317, boost converter, a triple
-  bench supply), logic (half
+  bench supply, a 1970s 15 V system supply), logic (half
   adder, SR latch, ripple counter), a 4–20 mA current loop, and SPICE
   netlists in each dialect.
 - A triple bench supply from one 24 V input: +0–20 V and −0–20 V at 0.7 A and
@@ -144,6 +146,15 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   parts. Each channel has an LCD voltmeter and ammeter, and text boxes say
   what is what; in live mode, set it from Controls: VSETn, ISETn and OVPSETn
   for each channel's volts, current limit and OVP level, and RESETn.
+- A 1970s 15 V, 0–12 A system power supply (E92-331 Figure 11), part for part
+  from the manual's parts list: a bridge into 28,000 µF, four 2N3771s, a
+  discrete error amplifier on a 1N825 reference, foldback current limit, a
+  2N2646 UJT that fires a 2N681 SCR crowbar at 17.5 V, and a relay that drops
+  out below 12.5 V. Its test points A–J read the manual's voltage table at no
+  load and at 6 A. Switch in LOAD1 and LOAD2 (6 A each) or SHORT in live mode;
+  the trimmers are R22 (output), R15 (current limit), R29 (high limit) and R36
+  (low limit). T1's ratings aren't listed, so 118 V : 25.3 V is chosen to match
+  test point A, and a 9 V relay stands in for the mercury-wetted K1.
 - The largest is channel A of a Foxboro SPEC 200 2AI-P2V RTD-to-0–10 V
   converter, laid out after the MI 2AI-185 component diagram, with a 3-wire
   Pt100 bridge, a JFET chopper amplifier and a transformer-isolated output.

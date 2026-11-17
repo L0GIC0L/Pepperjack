@@ -105,6 +105,42 @@ class EngineInstrumentedTest {
         Log.i(TAG, "Simulated ${ModelZoo.benches().size} model benches, plain and live")
     }
 
+    /**
+     * The E92-331 supply reads the manual's test-point table, at no load and with one 6 A load
+     * switched in: the last two mains cycles' average, within 0.1 V of the manual's range.
+     */
+    @Test
+    fun systemPowerSupplyMatchesTheManual(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        val circuit = Examples.all.first { it.title == "System power supply (E92-331)" }.build()
+        val noLoad = mapOf(
+            "a" to 32.0..33.0, "b" to 28.0..30.0, "c" to 16.3..16.7, "d" to 15.7..16.0, "e" to 15.4..15.5,
+            "f" to 15.0..15.0, "i" to 15.0..15.0, "j" to 15.0..15.0, "out" to 15.0..15.0,
+        )
+        val sixAmps = mapOf(
+            "a" to 29.0..30.0, "b" to 25.0..27.0, "c" to 17.7..18.2, "d" to 17.1..17.5, "e" to 16.6..16.9,
+            "f" to 16.0..16.2, "i" to 16.0..16.2, "j" to 15.3..15.4, "out" to 15.0..15.0,
+        )
+        for ((load, table) in listOf("open" to noLoad, "closed" to sixAmps)) {
+            val parts = circuit.schematic.parts.map { if (it.ref == "LOAD1") it.copy(value = load) else it }
+            val netlist = Netlister.netlist(circuit.copy(schematic = circuit.schematic.copy(parts = parts)))
+            val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            assertTrue(result.error, result.succeeded)
+            val plot = result.plots.first { it.scale?.name.equals("time", true) }
+            val time = plot.scale!!.real
+            val from = time.last() - 2 / 60.0
+            for ((node, range) in table) {
+                val v = plot.vectors.first { it.name.equals(node, true) || it.name.equals("v($node)", true) }.real
+                // Time-weighted, since the steps aren't even.
+                var area = 0.0
+                for (k in 1 until time.size) if (time[k] > from) area += (v[k] + v[k - 1]) / 2 * (time[k] - time[k - 1])
+                val average = area / (time.last() - from)
+                Log.i(TAG, "E92-331 LOAD1 $load: $node = $average V")
+                assertTrue("LOAD1 $load: $node = $average V, manual $range", average in range.start - 0.1..range.endInclusive + 0.1)
+            }
+        }
+    }
+
     /** The online library end to end: download TI's LM358 model from GitHub, then simulate it in a schematic. */
     @Test
     fun anOnlineModelDownloadsAndSimulates(): Unit = runBlocking {
@@ -144,7 +180,7 @@ class EngineInstrumentedTest {
             "Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator",
             "Half adder (logic gates)", "Voltage divider", "Kirchhoff's current law", "Wheatstone bridge",
             "Zener regulator", "Current mirror", "LM317 adjustable supply", "4–20 mA current loop",
-            "Triple bench power supply",
+            "Triple bench power supply", "System power supply (E92-331)",
         )
     }
 }
