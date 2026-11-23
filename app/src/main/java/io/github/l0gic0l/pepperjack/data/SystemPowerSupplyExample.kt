@@ -7,6 +7,7 @@ import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartKind.AMMETER
 import io.github.l0gic0l.pepperjack.model.PartKind.CAPACITOR
 import io.github.l0gic0l.pepperjack.model.PartKind.DIODE
+import io.github.l0gic0l.pepperjack.model.PartKind.ELOAD
 import io.github.l0gic0l.pepperjack.model.PartKind.LCD_AMMETER
 import io.github.l0gic0l.pepperjack.model.PartKind.LCD_VOLTMETER
 import io.github.l0gic0l.pepperjack.model.PartKind.LED
@@ -166,9 +167,9 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     w(132, 26, 132, 32)
 
     // ---- The output (+S and +DC, jumpered at TB2 for local sensing) and the common (−S, −DC).
-    w(48, 32, 248, 32)
+    w(48, 32, 264, 32)
     label(134, 32, "out")
-    w(48, 56, 248, 56)
+    w(48, 56, 264, 56)
     ground(48, 56)
 
     // ---- Error amplifier: Q9 on the 6.2 V reference CR8, Q10 on the divider R21, R22 (OUTPUT)
@@ -286,7 +287,7 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     p(SWITCH, "SAPPLY", 230, 38, value = "APPLY", mirrored = true)
     w(232, 39, 232, 37, 237, 37)
     p(VOLTAGE, "VAPPLY", 237, 37, value = "PULSE(0 1 30m)")
-    w(230, 42, 230, 44, 242, 44)
+    w(230, 42, 230, 44, 250, 44)
     w(232, 41, 232, 44)
     w(237, 41, 237, 44)
     p(SPST, "LOAD1", 230, 44, value = "open")
@@ -298,8 +299,13 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     p(SPST, "SHORT", 242, 44, value = "open")
     p(RESISTOR, "RS", 242, 48, value = "10m")
     w(242, 52, 242, 56)
-    p(LCD_VOLTMETER, "VOUT", 248, 32)
-    w(248, 36, 248, 56)
+    // A bench electronic load, input off: switch it on in Controls. In constant current it
+    // sweeps up to 16 A and back, past the knee: the output collapses to about 0 V at 3 A, and
+    // stays there until the load asks for less than that, as with a load on the bench.
+    p(ELOAD, "EL1", 250, 44, value = "CC 16 on=30m sweep off")
+    w(250, 48, 250, 56)
+    p(LCD_VOLTMETER, "VOUT", 264, 32)
+    w(264, 36, 264, 56)
 
     p(
         TEXT, "TXT1", 0, -22,
@@ -320,11 +326,15 @@ internal fun systemPowerSupply(): Circuit = Sheet().run {
     )
     p(
         TEXT, "TXT3", 136, 60,
-        value = "Added for the simulation: LOAD1 and LOAD2 (6 A each) and\n" +
-            "SHORT, which SAPPLY connects 30 ms into each run, once the\n" +
-            "supply is up and K1 is in; the IOUT and VOUT panel meters;\n" +
-            "and lamps on K1's contacts: green DS2 above the low limit,\n" +
-            "red DS3 below it.\n" +
+        value = "Added for the simulation: LOAD1 and LOAD2 (6 A each),\n" +
+            "SHORT and the electronic load EL1, which SAPPLY connects 30 ms\n" +
+            "into each run, once the supply is up and K1 is in; the IOUT\n" +
+            "and VOUT panel meters; and lamps on K1's contacts: green DS2\n" +
+            "above the low limit, red DS3 below it.\n" +
+            "EL1 (input off) sweeps 0–16 A–0 in constant current: past\n" +
+            "the knee the output locks at about 0 V and 3 A until the load\n" +
+            "asks for less. Run it, plot V(out) and set X to I(VIOUT):\n" +
+            "15 V out to the knee, the collapse, and the way back up.\n" +
             "Only the crowbar switches the output off. Below 12.5 V,\n" +
             "K1 drops out to tell the system on J1, and the current\n" +
             "limit folds back (Figure 10) to 3 A into a short.\n" +

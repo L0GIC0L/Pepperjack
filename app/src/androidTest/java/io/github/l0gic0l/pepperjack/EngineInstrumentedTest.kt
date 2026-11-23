@@ -141,6 +141,45 @@ class EngineInstrumentedTest {
         }
     }
 
+    /**
+     * The E92-331 supply against its electronic load, swept 0–16 A–0 in constant current: it holds
+     * 15 V to the knee, collapses past it to near 0 V, stays there while the load asks for more
+     * than the 3 A foldback floor, and recovers once it asks for less. In the same live run with
+     * R15 turned down and both resistive loads on, K1 is in before the loads and out after.
+     */
+    @Test
+    fun systemPowerSupplyLocksUpUnderAConstantCurrentLoad(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        val circuit = Examples.all.first { it.title == "System power supply (E92-331)" }.build()
+        fun with(vararg values: Pair<String, String>) = circuit.copy(
+            schematic = circuit.schematic.copy(parts = circuit.schematic.parts.map { p -> values.toMap()[p.ref]?.let { p.copy(value = it) } ?: p }),
+        )
+        val swept = with("EL1" to "CC 16 on=30m sweep")
+        val netlist = Netlister.netlist(swept)
+        val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+        assertTrue(result.error, result.succeeded)
+        val plot = result.plots.first { it.scale?.name.equals("time", true) }
+        val time = plot.scale!!.real
+        val out = plot.vectors.first { it.name.equals("out", true) || it.name.equals("v(out)", true) }.real
+        fun at(ms: Double) = out[time.indexOfFirst { it >= ms / 1000 }.coerceAtLeast(0)]
+        Log.i(TAG, "E92-331 under EL1: ${listOf(55.0, 70.0, 85.0, 99.5).map { "$it ms ${at(it)} V" }}")
+        assertTrue("regulating at 11 A: ${at(55.0)}", at(55.0) > 14.9)
+        assertTrue("collapsed past the knee: ${at(70.0)}", at(70.0) < 1.0)
+        assertTrue("still locked at 5 A: ${at(85.0)}", at(85.0) < 1.0)
+        assertTrue("recovered below 3 A: ${at(99.5)}", at(99.5) > 14.5)
+
+        val overloaded = with("LOAD1" to "closed", "LOAD2" to "closed", "R15" to "100 18%", "R36" to "200 11%")
+        val live = Netlister.netlist(overloaded, live = true)
+        val liveResult = container.engine.run(live.text, SpiceDialect.Default, live.probeVectors, live.warnings)
+        assertTrue(liveResult.error, liveResult.succeeded)
+        val view = LiveView.build(overloaded.schematic, live, liveResult)!!
+        val k1 = overloaded.schematic.parts.first { it.ref == "K1" }.id
+        val before = view.position(0.025)
+        val after = view.position(0.099)
+        assertTrue("K1 in at 25 ms", k1 in view.energizedAt(before))
+        assertTrue("K1 out at the end", k1 !in view.energizedAt(after))
+    }
+
     /** The online library end to end: download TI's LM358 model from GitHub, then simulate it in a schematic. */
     @Test
     fun anOnlineModelDownloadsAndSimulates(): Unit = runBlocking {

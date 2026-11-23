@@ -46,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -301,7 +302,13 @@ fun EditorScreen(
                     null
                 } else {
                     { modifier ->
-                        LiveControls(circuit.schematic, controls, animator, onPot = viewModel::setPotPosition, onSwitch = viewModel::toggleSwitch, modifier = modifier)
+                        LiveControls(
+                            circuit.schematic, controls, animator,
+                            onPot = viewModel::setPotPosition,
+                            onSwitch = viewModel::toggleSwitch,
+                            modifier = modifier,
+                            onValue = viewModel::tweakValue,
+                        )
                     }
                 },
             )
@@ -459,6 +466,10 @@ private fun SchematicPane(
     liveHint: Boolean,
     onHideLiveHint: () -> Unit,
 ) {
+    // Relays pulled in at the playback time; the sheet redraws only when one changes.
+    val energized by remember(animator) {
+        derivedStateOf { animator?.let { it.frame; it.view.energizedAt(it.position) } ?: emptySet() }
+    }
     var trayOpen by rememberSaveable { mutableStateOf(false) }
     var draggingPart by remember { mutableStateOf(false) }
     var canvasCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
@@ -529,6 +540,7 @@ private fun SchematicPane(
                     onSelectArea = viewModel::selectArea,
                     onMoveGroup = viewModel::moveGroup,
                     fitClearBottom = 72.dp,
+                    energized = energized,
                 )
                 if (animator != null) {
                     LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize(), probeColors)

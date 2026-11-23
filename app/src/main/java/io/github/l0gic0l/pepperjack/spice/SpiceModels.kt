@@ -82,6 +82,15 @@ object SpiceModels {
 
     fun find(name: String): SpiceModel? = all[name.trim().uppercase(Locale.ROOT)]
 
+    /** A built-in relay's coil currents to operate and to release, or null if [name] isn't one. */
+    fun relayCoil(name: String): Pair<Double, Double>? {
+        val model = find(name)?.takeIf { it.family == ModelFamily.RELAY } ?: return null
+        val match = Regex("""it=([-\d.eE+]+)\s+ih=([-\d.eE+]+)""").find(model.text) ?: return null
+        val threshold = match.groupValues[1].toDoubleOrNull() ?: return null
+        val hysteresis = match.groupValues[2].toDoubleOrNull() ?: return null
+        return (threshold + hysteresis) to (threshold - hysteresis)
+    }
+
     val models: Collection<SpiceModel> get() = all.values
 
     val names: List<String> get() = all.values.map { it.name }

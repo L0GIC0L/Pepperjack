@@ -22,7 +22,7 @@ enum class PartKind {
     TEXT, LCD_VOLTMETER, LCD_AMMETER,
     SCHOTTKY, NJFET, PJFET,
     COMPARATOR, REGULATOR, REGULATOR_ADJ, TIMER555, OPTO,
-    SCR, UJT, RELAY,
+    SCR, UJT, RELAY, ELOAD,
     AND, NAND, OR, NOR, XOR, NOT, SCHMITT, DFF,
     CUSTOM,
 }
@@ -40,7 +40,7 @@ enum class PartCategory(val title: String) {
 }
 
 /** How the properties sheet edits a part's value. */
-enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE, NOTE }
+enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE, NOTE, ELOAD }
 
 data class PinDef(val name: String, val x: Int, val y: Int)
 
@@ -81,6 +81,8 @@ data class PartDef(
     val editor: ValueEditor = ValueEditor.TEXT,
     /** Symbols that show their state (switch positions) draw these instead of [shapes]. */
     val stateShapes: ((String) -> List<Shape>)? = null,
+    /** A relay pulled in during a live run draws these. */
+    val energizedShapes: List<Shape>? = null,
 ) {
     val hasValue: Boolean get() = editor != ValueEditor.NONE
     val emitsSpice: Boolean get() = kind != PartKind.GROUND && kind != PartKind.LABEL && kind != PartKind.PROBE && kind != PartKind.TEXT
@@ -293,12 +295,15 @@ object PartLibrary {
      * A coil on the left and a changeover contact on the right, resting on NC, with the dashed
      * link between them.
      */
-    private val relayBody: List<Shape> = buildList {
+    private val relayBody: List<Shape> = relayShapes(energized = false)
+
+    /** A relay with its blade on NC, or (energised) on NO. */
+    private fun relayShapes(energized: Boolean): List<Shape> = buildList {
         add(line(-2, 0, -2, 1)); add(line(-2, 3, -2, 4))
         (0 until 4).forEach { add(arc(-2f, 1.25f + 0.5f * it, 0.25f, -90f, 180f)) }
         add(line(2, 4, 2, 2.6))
         add(Shape.Circle(2f, 2.6f, 0.12f, filled = true))
-        add(line(2, 2.6, 1.1, 1.05))
+        add(if (energized) line(2, 2.6, 2.9, 1.25) else line(2, 2.6, 1.1, 1.05))
         add(line(1, 0, 1, 1)); add(line(0.75, 1, 1.25, 1))
         add(line(3, 0, 3, 1.2)); add(line(2.75, 1.2, 3.25, 1.2))
         // The link from the coil to the blade, dashed.
@@ -344,6 +349,17 @@ object PartLibrary {
         line(0, 0, 0, 1), Shape.Circle(0f, 2f, 1f), line(0, 3, 0, 4),
         Shape.Glyph(0f, 2f, letter, 1f),
     ) + plus(0.75f, 0.75f, 0.15f)
+
+    /**
+     * A bench electronic load: a box drawing current in at + (the arrow) and out at −, with its
+     * mode (CC, CR, CV or CP) on its face.
+     */
+    private fun eloadShapes(value: String) = listOf(
+        line(0, 0, 0, 0.6), line(0, 3.4, 0, 4),
+        rect(-1.8, 0.6, 1.8, 3.4),
+        line(-1.05, 1.1, -1.05, 2.55), arrowHead(-1.05f, 1.1f, -1.05f, 2.9f),
+        Shape.Glyph(0.45f, 2f, ELoadValue.parse(value).mode.token, 0.9f),
+    ) + plus(0.55f, 0.25f, 0.15f)
 
     /** A panel meter: a wide LCD, fed from + at the top and − at the bottom. */
     private fun lcd(unit: String) = listOf(
@@ -502,6 +518,12 @@ object PartLibrary {
             // Subcircuit port order: coil, coil, common, normally open, normally closed.
             listOf(PinDef("C1", -2, 0), PinDef("C2", -2, 4), PinDef("COM", 2, 4), PinDef("NO", 3, 0), PinDef("NC", 1, 0)),
             relayBody, families = listOf(ModelFamily.RELAY), editor = ValueEditor.MODEL,
+            energizedShapes = relayShapes(energized = true),
+        ),
+        PartDef(
+            PartKind.ELOAD, "Electronic load", "B", "EL", PartCategory.INTERACTIVE, ELoadValue.DEFAULT, "Setting",
+            "CC 6 (amps), CR 2.5 (ohms), CV 12 (volts) or CP 50 (watts)",
+            sourcePins, eloadShapes(ELoadValue.DEFAULT), editor = ValueEditor.ELOAD, stateShapes = ::eloadShapes,
         ),
         PartDef(
             PartKind.PROBE, "Measurement probe", "", "PR", PartCategory.INTERACTIVE, ProbeValue.DEFAULT, "Readings",

@@ -9,6 +9,7 @@ import io.github.l0gic0l.pepperjack.model.Wire
 import io.github.l0gic0l.pepperjack.model.pinPositions
 import io.github.l0gic0l.pepperjack.spice.Connectivity
 import io.github.l0gic0l.pepperjack.spice.NetlistResult
+import io.github.l0gic0l.pepperjack.spice.SpiceModels
 import io.github.l0gic0l.pepperjack.spice.contains
 import java.util.Locale
 import kotlin.math.abs
@@ -34,6 +35,12 @@ class LiveReadout(val partId: Long, val kind: PartKind, val values: DoubleArray)
  */
 class LiveProbe(val partId: Long, val voltage: DoubleArray?, val current: DoubleArray?, val direction: String?)
 
+/** Whether a relay is pulled in, per sample, from its coil current. */
+class LiveRelay(val partId: Long, val energized: BooleanArray)
+
+/** What an electronic load's display shows, per sample: the voltage across it and the current it draws. */
+class LiveLoad(val partId: Long, val voltage: DoubleArray, val current: DoubleArray)
+
 /** A probed voltage or current, per sample: the live oscilloscope's channels. */
 class LiveTrace(val probe: Probe, val label: String, val quantity: Quantity, val values: DoubleArray)
 
@@ -53,7 +60,18 @@ class LiveView(
     val traces: List<LiveTrace> = emptyList(),
     /** Readings of the measurement-probe parts. */
     val probes: List<LiveProbe> = emptyList(),
+    /** Readings of the electronic loads. */
+    val loads: List<LiveLoad> = emptyList(),
+    /** Each relay's state through the run. */
+    val relays: List<LiveRelay> = emptyList(),
 ) {
+    /** The relays pulled in at fractional sample [position]. */
+    fun energizedAt(position: Double): Set<Long> {
+        if (relays.isEmpty()) return emptySet()
+        val i = position.toInt()
+        return relays.filter { it.energized.getOrElse(i.coerceIn(0, it.energized.size - 1)) { false } }.mapTo(HashSet()) { it.partId }
+    }
+
     private val probeStats = HashMap<Pair<Long, Boolean>, WaveStats?>()
 
     /** A probe's voltage (or [current]) measurements over the whole run, worked out once. */
@@ -131,6 +149,19 @@ class LiveView(
                 LiveProbe(part.id, netlist.pinNets[part.id]?.firstOrNull()?.let(::voltage), current, direction)
             }
 
+            val loads = schematic.parts.filter { it.kind == PartKind.ELOAD }.mapNotNull { part ->
+                val nets = netlist.pinNets[part.id] ?: return@mapNotNull null
+                val plus = voltage(nets[0]) ?: return@mapNotNull null
+                val minus = voltage(nets[1]) ?: return@mapNotNull null
+                val current = pinCurrent(part.id, 0) ?: return@mapNotNull null
+                LiveLoad(part.id, DoubleArray(samples) { plus[it] - minus[it] }, current)
+            }
+
+            val relays = schematic.parts.filter { it.kind == PartKind.RELAY }.mapNotNull { part ->
+                val coil = pinCurrent(part.id, 0) ?: return@mapNotNull null
+                LiveRelay(part.id, relayStates(coil, SpiceModels.relayCoil(part.value)))
+            }
+
             val order = schematic.allProbes
             val traces = netlist.probeVectors.sortedBy { order.indexOf(it.probe) }.mapNotNull { pv ->
                 val quantity = if (pv.probe.type == ProbeType.VOLTAGE) Quantity.VOLTAGE else Quantity.CURRENT
@@ -139,7 +170,23 @@ class LiveView(
 
             val maxVoltage = segments.mapNotNull { it.voltage }.distinct().maxOfOrNull { s -> s.maxOf { abs(it) } } ?: 0.0
             val maxCurrent = segments.maxOfOrNull { s -> s.current.maxOf { abs(it) } } ?: 0.0
-            return LiveView(time, segments, readouts, maxVoltage, maxCurrent, traces, probes)
+            return LiveView(time, segments, readouts, maxVoltage, maxCurrent, traces, probes, loads, relays)
+        }
+
+        /**
+         * A relay's state per sample from its coil current: it pulls in at the operate current and
+         * drops out at the release current, holding between, as the relay model does. A library relay
+         * without known thresholds counts as pulled in above half its largest coil current.
+         */
+        internal fun relayStates(coil: DoubleArray, thresholds: Pair<Double, Double>?): BooleanArray {
+            val peak = coil.maxOfOrNull { abs(it) } ?: 0.0
+            val (operate, release) = thresholds ?: ((peak / 2) to (peak / 2))
+            var on = false
+            return BooleanArray(coil.size) { i ->
+                val current = abs(coil[i])
+                if (current > 0 && current >= operate) on = true else if (current <= release) on = false
+                on
+            }
         }
 
         /**

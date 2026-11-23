@@ -118,6 +118,8 @@ fun SchematicCanvas(
     onMoveGroup: (Int, Int) -> Unit = { _, _ -> },
     /** A strip along the bottom that fitting keeps the sheet clear of: the toolbar floats there. */
     fitClearBottom: Dp = 0.dp,
+    /** Relays pulled in at the live run's playback time. */
+    energized: Set<Long> = emptySet(),
 ) {
     val colors = LocalCircuitColors.current
     val textMeasurer = rememberTextMeasurer()
@@ -347,7 +349,7 @@ fun SchematicCanvas(
                 part.kind == PartKind.PROBE -> probeColors[Probe(ProbeType.VOLTAGE, part.x, part.y)] ?: colors.part
                 else -> colors.part
             }
-            drawPart(part, transform, color, stroke, textMeasurer, dx, dy)
+            drawPart(part, transform, color, stroke, textMeasurer, dx, dy, energized = part.id in energized)
             drawPartLabels(part, transform, textMeasurer, colors.part.copy(alpha = 0.85f), labelBackground, labelText, dx, dy)
         }
 

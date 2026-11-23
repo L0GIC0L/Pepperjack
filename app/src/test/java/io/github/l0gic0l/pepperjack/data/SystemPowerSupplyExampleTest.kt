@@ -44,5 +44,8 @@ class SystemPowerSupplyExampleTest {
         }
         // It opens at no load, so the first run reads the manual's no-load column.
         listOf("LOAD1", "LOAD2", "SHORT").forEach { assertEquals(it, "open", values[it]) }
+        // The electronic load starts with its input off.
+        assertEquals("CC 16 on=30m sweep off", values["EL1"])
+        assertTrue(netlist.text, netlist.text.lines().any { it.startsWith("BEL1 ") && it.endsWith(" I=0") })
     }
 }

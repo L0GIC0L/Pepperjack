@@ -353,7 +353,7 @@ private fun DrawScope.drawTag(
     drawText(layout, topLeft = topLeft + Offset(pad, pad / 2))
 }
 
-private fun ledColor(model: String): Color {
+internal fun ledColor(model: String): Color {
     val name = model.uppercase()
     return when {
         "GREEN" in name -> Color(0xFF00E676)

@@ -86,3 +86,57 @@ object SwitchValue {
     fun isB(value: String) = value.trim().equals("B", ignoreCase = true)
     fun toggleSpdt(value: String) = if (isB(value)) "A" else "B"
 }
+
+/** What an electronic load holds constant, and the unit of its setting. */
+enum class LoadMode(val token: String, val title: String, val unit: String) {
+    CC("CC", "Constant current", "A"),
+    CR("CR", "Constant resistance", "Ω"),
+    CV("CV", "Constant voltage", "V"),
+    CP("CP", "Constant power", "W"),
+}
+
+/**
+ * An electronic load's value text, "CC 6 Von=10 on=30m sweep": its mode and setting; the
+ * input voltage it draws above (Von, none by default); when its input turns on in the run
+ * (at the start by default); whether it sweeps its setting from nothing up to the set value
+ * at mid-run and back down, to trace a supply's V–I curve in one run; and "off" when its
+ * input is switched off, as with a bench load's input button.
+ */
+data class ELoadValue(
+    val mode: LoadMode,
+    val setting: String,
+    val von: String = "",
+    val on: String = "",
+    val sweep: Boolean = false,
+    val input: Boolean = true,
+) {
+    fun format(): String = buildString {
+        append(mode.token).append(' ').append(setting)
+        if (von.isNotBlank()) append(" Von=").append(von.trim())
+        if (on.isNotBlank()) append(" on=").append(on.trim())
+        if (sweep) append(" sweep")
+        if (!input) append(" off")
+    }
+
+    companion object {
+        const val DEFAULT = "CC 1"
+
+        fun parse(value: String): ELoadValue {
+            val tokens = value.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
+            fun option(name: String) = tokens.firstOrNull { it.startsWith("$name=", ignoreCase = true) }?.substringAfter('=').orEmpty()
+            val mode = tokens.firstNotNullOfOrNull { t -> LoadMode.entries.firstOrNull { it.token.equals(t, ignoreCase = true) } } ?: LoadMode.CC
+            val flags = setOf("sweep", "off")
+            val setting = tokens.firstOrNull { t ->
+                '=' !in t && LoadMode.entries.none { it.token.equals(t, ignoreCase = true) } && t.lowercase(Locale.ROOT) !in flags
+            }
+            return ELoadValue(
+                mode = mode,
+                setting = setting ?: "1",
+                von = option("Von"),
+                on = option("on"),
+                sweep = tokens.any { it.equals("sweep", ignoreCase = true) },
+                input = tokens.none { it.equals("off", ignoreCase = true) },
+            )
+        }
+    }
+}

@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import io.github.l0gic0l.pepperjack.model.ELoadValue
+import io.github.l0gic0l.pepperjack.model.LoadMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.ui.editor.SourceSpec
@@ -30,8 +32,9 @@ import kotlin.math.pow
 /**
  * A slider over one part's value while live simulating. Resistance, capacitance and
  * inductance sweep logarithmically over a decade either side of where the knob started; a
- * DC source sweeps linearly from zero to twice its value. Values snap to two significant
- * figures, as standard part values do.
+ * DC source, or an electronic load's current, voltage or power, sweeps linearly from zero to
+ * twice its value (a load's resistance logarithmically, like a resistor's). Values snap to two
+ * significant figures, as standard part values do.
  */
 class LiveKnob private constructor(
     val unit: String,
@@ -68,6 +71,15 @@ class LiveKnob private constructor(
                     }
                     LiveKnob(unit, value / 10, value * 10, logarithmic = true) { Si.formatSpice(it) }
                 }
+                PartKind.ELOAD -> {
+                    val load = ELoadValue.parse(part.value)
+                    fun write(x: Double) = load.copy(setting = Si.formatSpice(x)).format()
+                    when {
+                        load.mode == LoadMode.CR && value > 0 -> LiveKnob(load.mode.unit, value / 10, value * 10, logarithmic = true, ::write)
+                        load.mode == LoadMode.CR -> null
+                        else -> LiveKnob(load.mode.unit, 0.0, if (value > 0) 2 * value else 10.0, logarithmic = false, ::write)
+                    }
+                }
                 else -> {
                     val spec = SourceSpec.parse(part.value)
                     val (low, high) = when {
@@ -85,6 +97,7 @@ class LiveKnob private constructor(
         /** The value a knob would sweep: a plain R, C or L value, or a DC source's level. */
         fun read(part: Part): Double? = when (part.kind) {
             PartKind.RESISTOR, PartKind.CAPACITOR, PartKind.INDUCTOR -> Si.parse(part.value)
+            PartKind.ELOAD -> Si.parse(ELoadValue.parse(part.value).setting)
             PartKind.VOLTAGE, PartKind.CURRENT -> SourceSpec.parse(part.value).takeIf { it.type == SourceType.DC }?.let { Si.parse(it.dc) }
             else -> null
         }?.takeIf { it.isFinite() }

@@ -57,7 +57,16 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   peak-to-peak value over the run. Tap a wire to read its node voltage and
   current.
 - Interactive parts: tap a toggle or changeover switch to flip it, and drag
-  the slider of a selected potentiometer.
+  the slider of a selected potentiometer. Relays move their contacts as their
+  coils pull in and drop out during the run.
+- Electronic load, like a bench DC load: constant current, resistance,
+  voltage or power, with an input switch, an optional Von (it draws only
+  above that voltage), a time to switch its input on partway through a run
+  (once a supply is up), and a sweep that takes the setting from nothing up
+  to its value at mid-run and back. Below 0.5 V it can't hold a current or
+  power setting and draws as a resistor, as a real load does. Its Controls
+  row has the mode, a knob over the setting, the input switch, and its
+  display of volts and amps.
 - LCD meters: an LCD voltmeter or ammeter shows its reading in big
   four-digit figures on the sheet, readable even zoomed out, where other text
   is hidden.
@@ -67,9 +76,10 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   down to just the bar. With two panes (an unfolded foldable, a tablet,
   landscape) it takes the second pane, and the sheet has the first whole.
 - Controls: on a sheet with knobs or switches, the live panel opens on a
-  front panel of every potentiometer and switch, under the sheet's LCD
-  meters (or, if it has none, every meter's reading), so a big circuit can be
-  worked without hunting for its parts. Scope is the other tab.
+  front panel of every potentiometer, switch and electronic load, under the
+  sheet's LCD meters (or, if it has none, every meter's reading) and its LEDs
+  as indicator lamps, so a big circuit can be worked without hunting for its
+  parts. Scope is the other tab.
 - Value knobs: select a resistor, capacitor, inductor or DC source and a
   slider sweeps its value (a decade either way for R, C and L, logarithmic;
   zero to twice the level for a source). One turn is one undo step.
@@ -97,12 +107,12 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   the plots update too.
 
 **Schematic editor**
-- 52 symbols:
+- 53 symbols:
   - Passives: R, L, C, potentiometer, transformer, crystal.
   - Sources: voltage and current sources (DC, AC, sine, pulse, any SPICE
     source).
   - Switches and meters: toggle and changeover switches, relay, ammeter,
-    voltmeter, LCD ammeter and voltmeter, measurement probe.
+    voltmeter, LCD ammeter and voltmeter, measurement probe, electronic load.
   - Semiconductors: diode, Schottky, zener, LED, NPN, PNP, N/P JFETs, N/P
     MOSFETs, SCR, unijunction transistor.
   - ICs: ideal op-amp, op-amp, comparator, fixed and adjustable regulators,
@@ -156,7 +166,10 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   load and at 6 A. Switch in LOAD1 and LOAD2 (6 A each) or SHORT in live mode:
   they connect 30 ms into each run, once the output is up and K1 has pulled in,
   so an overload shows K1 dropping out (the green lamp goes out, the red one
-  lights);
+  lights, and K1's contact moves). Its electronic load EL1, switched on in
+  Controls, sweeps 0–16 A and back in constant current: past the knee the
+  output locks at about 0 V and 3 A until the load asks for less than that,
+  as a foldback supply does on a bench load;
   the trimmers are R22 (output), R15 (current limit), R29 (high limit) and R36
   (low limit). T1's ratings aren't listed, so 118 V : 25.3 V is chosen to match
   test point A, and a 9 V relay stands in for the mercury-wetted K1.
@@ -224,6 +237,9 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 
 **Results**
 - Waveforms with pinch zoom on each axis, pan, and two cursors with Δ and 1/Δ.
+- XY plots: set the x axis of a transient or DC sweep to any trace, and the
+  chosen traces plot against it, such as a supply's output voltage against
+  its load current, or a Lissajous figure.
 - Measure on a transient: the same measurements as the scope (mean, RMS, AC
   RMS, peak to peak, min, max, frequency, period) for every plotted trace,
   over the run or between cursors A and B.
