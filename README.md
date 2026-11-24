@@ -94,6 +94,12 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - Cursors: two time cursors, A and B, to drag or tap into place. The table
     shows each channel at A and at B and the difference, with Δt and 1/Δt,
     and the measurements then cover only the time between the cursors.
+- Probe tags at three levels of detail, set by the Tags button on the sheet:
+  compact (one line each: the name and the reading now), full (every reading
+  the probe was set to show) or hidden. A selected probe always shows all of
+  its readings. A current line is left out where the current never reaches a
+  nanoamp (a probe on a net into a source or a gate), and tags are placed
+  clear of the parts where there is room.
 - Measurement probes, like Multisim's: place one on a wire (from the parts
   tray, with the probe tool, or with Plot on a tapped wire) and it shows the
   voltage there and the current along the wire, now and as peak to peak,
@@ -137,17 +143,19 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
-- 51 examples in ten categories, searchable, with the ones made for live mode
+- 57 examples in ten categories, searchable, with the ones made for live mode
   marked: basics (divider, Kirchhoff, Wheatstone bridge, RC and RL steps),
   filters (RC, RLC, Sallen-Key, twin-T notch), diodes (half-wave and bridge
-  rectifiers, zener regulator, clipper, clamp, doubler), transistors
-  (common-emitter, emitter follower, current mirror, differential pair,
-  push-pull, relay driver with flyback diode), op-amps (inverting, summing,
-  integrator, instrumentation amplifier, Schmitt trigger, precision
-  rectifier), oscillators (555 astable and one-shot, two-transistor astable,
-  relaxation, Wien bridge), power (7805, LM317, boost converter, a triple
-  bench supply, a 1970s 15 V system supply), logic (half
-  adder, SR latch, ripple counter), a 4–20 mA current loop, and SPICE
+  rectifiers, zener regulator, clipper, clamp, doubler, a diode's I–V curve
+  in XY), transistors (common-emitter, emitter follower, current mirror,
+  differential pair, push-pull, relay driver with flyback diode, an SCR latch
+  with reset), op-amps (inverting, summing, integrator, instrumentation
+  amplifier, Schmitt trigger, precision rectifier), oscillators (555 astable
+  and one-shot, two-transistor astable, relaxation, Wien bridge, UJT
+  relaxation, Lissajous figures in XY), power (7805, LM317, boost converter,
+  a triple bench supply, a 1970s 15 V system supply, an LM317 on an
+  electronic load), logic (half adder, SR latch, ripple counter), a 4–20 mA
+  current loop, a relay start/stop circuit with a seal-in contact, and SPICE
   netlists in each dialect.
 - A triple bench supply from one 24 V input: +0–20 V and −0–20 V at 0.7 A and
   0–5 V at 1 A, each isolated by its own DC-DC module, with a knob each for

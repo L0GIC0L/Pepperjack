@@ -8,19 +8,30 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.RotateRight
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DataObject
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.IosShare
+import androidx.compose.material.icons.outlined.LabelOff
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
@@ -40,6 +51,7 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,6 +74,8 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -69,16 +83,18 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.l0gic0l.pepperjack.AppContainer
 import io.github.l0gic0l.pepperjack.data.Settings
+import io.github.l0gic0l.pepperjack.data.TagDetail
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
 import io.github.l0gic0l.pepperjack.model.CustomSymbol
 import io.github.l0gic0l.pepperjack.model.GridPoint
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
-import io.github.l0gic0l.pepperjack.model.isMeter
 import io.github.l0gic0l.pepperjack.model.PartLibrary
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
+import io.github.l0gic0l.pepperjack.model.isLcd
+import io.github.l0gic0l.pepperjack.model.isMeter
 import io.github.l0gic0l.pepperjack.sim.Plot
 import io.github.l0gic0l.pepperjack.sim.PlotKind
 import io.github.l0gic0l.pepperjack.spice.NetlistResult
@@ -91,12 +107,8 @@ import io.github.l0gic0l.pepperjack.ui.live.LiveOverlay
 import io.github.l0gic0l.pepperjack.ui.live.LivePanel
 import io.github.l0gic0l.pepperjack.ui.live.LivePanelState
 import io.github.l0gic0l.pepperjack.ui.live.MeterModeControl
-import io.github.l0gic0l.pepperjack.ui.live.ProbeResultTags
-import androidx.compose.material.icons.automirrored.outlined.RotateRight
-import androidx.compose.material.icons.automirrored.outlined.ShowChart
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Delete
 import io.github.l0gic0l.pepperjack.ui.live.PotControl
+import io.github.l0gic0l.pepperjack.ui.live.ProbeResultTags
 import io.github.l0gic0l.pepperjack.ui.live.ScopeHistory
 import io.github.l0gic0l.pepperjack.ui.live.ValueKnob
 import io.github.l0gic0l.pepperjack.ui.live.controlParts
@@ -106,8 +118,8 @@ import io.github.l0gic0l.pepperjack.ui.results.traceColor
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicCanvas
 import io.github.l0gic0l.pepperjack.ui.schematic.SchematicViewport
 import io.github.l0gic0l.pepperjack.ui.theme.LocalCircuitColors
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private enum class EditorSheet { PARTS, ANALYSIS, DIRECTIVES, RENAME }
 private enum class Pane(val label: String) { SCHEMATIC("Schematic"), NETLIST("Netlist"), RESULTS("Results"), LIVE("Live") }
@@ -336,6 +348,8 @@ fun EditorScreen(
                     controlsInView = controlsInView,
                     liveHint = settings.liveHint,
                     onHideLiveHint = { scope.launch { container.settings.setLiveHint(false) } },
+                    tagDetail = settings.tagDetail,
+                    onTagDetail = { scope.launch { container.settings.setTagDetail(it) } },
                 )
             }
         }
@@ -465,6 +479,8 @@ private fun SchematicPane(
     controlsInView: Boolean,
     liveHint: Boolean,
     onHideLiveHint: () -> Unit,
+    tagDetail: TagDetail,
+    onTagDetail: (TagDetail) -> Unit,
 ) {
     // Relays pulled in at the playback time; the sheet redraws only when one changes.
     val energized by remember(animator) {
@@ -543,9 +559,12 @@ private fun SchematicPane(
                     energized = energized,
                 )
                 if (animator != null) {
-                    LiveOverlay(animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize(), probeColors)
+                    LiveOverlay(
+                        animator, circuit.schematic, viewport, state.liveColorMode, state.inspectWireId, Modifier.fillMaxSize(), probeColors,
+                        tagDetail, state.selectedPartId,
+                    )
                 } else {
-                    ProbeResultTags(circuit.schematic, state.result, netlist, viewport, probeColors, Modifier.fillMaxSize())
+                    ProbeResultTags(circuit.schematic, state.result, netlist, viewport, probeColors, Modifier.fillMaxSize(), tagDetail, state.selectedPartId)
                 }
                 val selected = state.selectedPart
                 if (selected != null && state.placing == null && !draggingPart && dragIn == null) {
@@ -639,6 +658,13 @@ private fun SchematicPane(
                             }
                         }
                     }
+                    // Probe tags: compact, full or hidden, for the whole sheet; a selected probe shows all of its readings.
+                    val tagged = circuit.schematic.parts.any { it.kind == PartKind.PROBE || (state.live && it.kind.isMeter && !it.kind.isLcd) }
+                    if (!trayOpen && tagged && (state.live || state.result != null)) {
+                        Row(wide, horizontalArrangement = Arrangement.End) {
+                            TagDetailButton(tagDetail, onClick = { onTagDetail(tagDetail.next) })
+                        }
+                    }
                     if (trayOpen) {
                         PartsTray(
                             symbols = symbols,
@@ -689,6 +715,29 @@ private fun rememberProbeColors(circuit: Circuit, netlist: NetlistResult?, state
                 val index = ordered.indexOfFirst { it.name == p.vector }
                 p.probe to if (index >= 0) traceColor(palette, index, ordered.size, 0) else outline
             }
+        }
+    }
+}
+
+/** Steps the probe tags on the sheet through compact, full and hidden. */
+@Composable
+private fun TagDetailButton(detail: TagDetail, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shadowElevation = 3.dp,
+        modifier = Modifier.semantics { contentDescription = "Probe tags: ${detail.label}. Tap for ${detail.next.label.lowercase()}." },
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                if (detail == TagDetail.OFF) Icons.Outlined.LabelOff else Icons.AutoMirrored.Outlined.Label,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text("Tags: ${detail.label}", style = MaterialTheme.typography.labelLarge)
         }
     }
 }

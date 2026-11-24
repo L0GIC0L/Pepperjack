@@ -156,4 +156,27 @@ class LiveControlsTest {
         // An operating point has no waveform: just the values.
         assertEquals(listOf("V   5.00 V"), probeLines(all - io.github.l0gic0l.pepperjack.model.ProbeReading.CURRENT, ProbeQuantity(5.0, null), null, transient = false))
     }
+
+    @Test
+    fun compactTagsAreOneLineAndLeaveOutLeakageCurrents() {
+        val all = io.github.l0gic0l.pepperjack.model.ProbeValue.parse("V I PP RMS")
+        val stats = io.github.l0gic0l.pepperjack.sim.WaveStats(0.0, 4.8, 2.4, 3.39, 1000.0)
+        // Live: the readings now.
+        assertEquals("4.80 V  16.8 mA", probeCompactLine(all, ProbeQuantity(4.8, stats), ProbeQuantity(16.8e-3, null, "→"), transient = true))
+        // After a run: the first measurement it was set to show.
+        assertEquals("p-p 4.80 V", probeCompactLine(all, ProbeQuantity(null, stats), null, transient = true))
+        // A probe on a net that carries only picoamps: no current, in either kind of tag.
+        val leak = ProbeQuantity(5e-12, io.github.l0gic0l.pepperjack.sim.WaveStats(-5e-12, 5e-12, 0.0, 3.5e-12, null))
+        assertEquals("4.80 V", probeCompactLine(all, ProbeQuantity(4.8, stats), leak, transient = true))
+        assertEquals(1, probeLines(all, ProbeQuantity(4.8, stats), leak, transient = true).size)
+    }
+
+    @Test
+    fun tagDetailStepsThroughEveryLevelAndASelectedProbeShowsAll() {
+        val levels = generateSequence(io.github.l0gic0l.pepperjack.data.TagDetail.COMPACT) { it.next }.take(4).toList()
+        assertEquals(listOf("COMPACT", "FULL", "OFF", "COMPACT"), levels.map { it.name })
+        val probe = Part(7, PartKind.PROBE, "PR1", 0, 0)
+        assertEquals(io.github.l0gic0l.pepperjack.data.TagDetail.FULL, tagDetailFor(probe, io.github.l0gic0l.pepperjack.data.TagDetail.OFF, selectedPartId = 7))
+        assertEquals(io.github.l0gic0l.pepperjack.data.TagDetail.OFF, tagDetailFor(probe, io.github.l0gic0l.pepperjack.data.TagDetail.OFF, selectedPartId = 8))
+    }
 }

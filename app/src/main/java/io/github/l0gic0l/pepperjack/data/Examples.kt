@@ -67,6 +67,7 @@ object Examples {
         Example("Diode clipper", "Back-to-back 1N4148s clip a 5 V sine at ±0.7 V", D) { diodeClipper() },
         Example("Diode clamp", "A 10 V peak-to-peak sine lifted to sit above 0 V", D) { diodeClamp() },
         Example("Voltage doubler", "Two diodes and two capacitors make about 18 V from a 10 V peak", D) { voltageDoubler() },
+        Example("Diode I–V curve (XY)", "Sweep a 1N4148 and plot its current against its own voltage", D) { diodeCurveXY() },
         // Transistors
         Example("Common-emitter amplifier", "2N3904 with divider bias, gain ≈ −3", T) { commonEmitter() },
         Example("Emitter follower", "Unity-gain buffer: the output follows the 2 V p-p input", T) { emitterFollower() },
@@ -76,6 +77,7 @@ object Examples {
         Example("Relay coil with flyback diode", "TIP120 switching 100 mH; D1 catches the turn-off spike", T) { flybackDiode() },
         Example("MOSFET LED driver", "DC sweep of a 2N7000 gate", T) { mosfetLed() },
         Example("Potentiometer dimmer (live)", "Turn the pot while live to dim an LED through a 2N2222", T, live = true) { potDimmer() },
+        Example("SCR latch with reset", "A gate pulse lights the lamp and the SCR holds it on until the anode current is broken", T, live = true) { scrLatch() },
         // Op-amps
         Example("Inverting op-amp", "Ideal op-amp with a gain of −10", O) { invertingOpAmp() },
         Example("Op-amp clipping", "Non-inverting gain of 2 hitting ±12 V rails", O) { opAmpClipping() },
@@ -90,6 +92,8 @@ object Examples {
         Example("Two-transistor astable", "Two LEDs take turns at about 1.7 Hz; watch it live", X, live = true) { astableMultivibrator() },
         Example("Op-amp relaxation oscillator", "Square wave at about 450 Hz from one op-amp and an RC", X) { relaxationOscillator() },
         Example("Wien-bridge oscillator", "1 kHz sine; diodes hold the amplitude steady", X) { wienBridge() },
+        Example("UJT relaxation oscillator", "A 2N2646 fires about 200 times a second: sawtooth and spikes; turn R1 while live", X, live = true) { ujtOscillator() },
+        Example("Lissajous figures (XY)", "1 kHz against 1.5 kHz, and an RC's 45° ellipse", X) { lissajous() },
         // Power supplies
         Example("7805 regulator", "12 V with 2 V of ripple in, a steady 5 V out", P) { regulator7805() },
         Example("LM317 adjustable supply", "Vout = 1.25 V × (1 + RV1 / R1); turn RV1 while live", P, live = true) { lm317Supply() },
@@ -106,12 +110,14 @@ object Examples {
             P,
             live = true,
         ) { systemPowerSupply() },
+        Example("LM317 on an electronic load", "A 0–2 A sweep finds its 1.5 A limit; it recovers at once, with no foldback", P, live = true) { lm317ELoad() },
         // Digital logic
         Example("Half adder (logic gates)", "XOR and AND gates light the sum and carry LEDs", G) { halfAdder() },
         Example("SR latch (NAND gates)", "Set at 0 and 4 ms, reset at 2 ms; the latch holds in between", G) { srLatch() },
         Example("Ripple counter (divide by 4)", "Two D flip-flops count clock pulses in binary", G) { rippleCounter() },
         // Instrumentation
         Example("4–20 mA current loop", "Set point to loop current; 1–5 V across the 250 Ω receiver", I, live = true) { currentLoop() },
+        Example("Relay start/stop (seal-in)", "START pulls K1 in, its own contact holds it, STOP drops it out", I, live = true) { relaySealIn() },
         Example("Foxboro SPEC 200 2AI-P2V (RTD to 0–10 V)", "Chopper-stabilized, transformer-isolated RTD converter, channel A", I) { spec200() },
         // Netlists
         Example("Diode I-V curve (netlist)", "Hand-written SPICE netlist with a DC sweep", N) { diodeNetlist() },

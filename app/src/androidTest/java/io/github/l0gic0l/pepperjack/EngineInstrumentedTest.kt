@@ -180,6 +180,41 @@ class EngineInstrumentedTest {
         assertTrue("K1 out at the end", k1 !in view.energizedAt(after))
     }
 
+    /**
+     * The latching examples hold and let go: the SCR's lamp is out before the gate pulse, held on
+     * after it, out after RESET, and the relay is in between START and STOP and out after.
+     */
+    @Test
+    fun latchingExamplesHoldAndRelease(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        suspend fun run(title: String): Pair<DoubleArray, (String) -> DoubleArray> {
+            val circuit = Examples.all.first { it.title == title }.build()
+            val netlist = Netlister.netlist(circuit)
+            val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            assertTrue("$title: ${result.error}", result.succeeded)
+            val plot = result.plots.first { it.scale?.name.equals("time", true) }
+            return plot.scale!!.real to { name -> plot.vectors.first { it.name.equals(name, true) }.real }
+        }
+        fun DoubleArray.at(time: DoubleArray, ms: Double) = this[time.indexOfFirst { it >= ms / 1000 }]
+
+        val scr = Examples.all.first { it.title == "SCR latch with reset" }.build()
+        val lampVector = Netlister.netlist(scr).probeVectors.first { it.label == "I(D1)" }.vector
+        val (t1, scrVectors) = run("SCR latch with reset")
+        val lamp = scrVectors(lampVector)
+        Log.i(TAG, "SCR lamp: ${listOf(5.0, 20.0, 30.0, 50.0).map { "$it ms ${lamp.at(t1, it)} A" }}")
+        assertTrue("out before the pulse", lamp.at(t1, 5.0) < 1e-3)
+        assertTrue("held on after it", lamp.at(t1, 20.0) > 10e-3)
+        assertTrue("out after RESET", lamp.at(t1, 30.0) < 1e-3)
+        assertTrue("on again after the next pulse", lamp.at(t1, 50.0) > 10e-3)
+
+        val (t2, relayVectors) = run("Relay start/stop (seal-in)")
+        val coil = relayVectors("coil")
+        Log.i(TAG, "Relay coil: ${listOf(10.0, 45.0, 90.0).map { "$it ms ${coil.at(t2, it)} V" }}")
+        assertTrue("out before START", coil.at(t2, 10.0) < 1.0)
+        assertTrue("sealed in after START", coil.at(t2, 45.0) > 11.0)
+        assertTrue("out after STOP", coil.at(t2, 90.0) < 1.0)
+    }
+
     /** The online library end to end: download TI's LM358 model from GitHub, then simulate it in a schematic. */
     @Test
     fun anOnlineModelDownloadsAndSimulates(): Unit = runBlocking {
@@ -219,7 +254,8 @@ class EngineInstrumentedTest {
             "Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator",
             "Half adder (logic gates)", "Voltage divider", "Kirchhoff's current law", "Wheatstone bridge",
             "Zener regulator", "Current mirror", "LM317 adjustable supply", "4–20 mA current loop",
-            "Triple bench power supply", "System power supply (E92-331)",
+            "Triple bench power supply", "System power supply (E92-331)", "SCR latch with reset", "UJT relaxation oscillator",
+            "LM317 on an electronic load", "Relay start/stop (seal-in)",
         )
     }
 }

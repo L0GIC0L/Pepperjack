@@ -481,13 +481,16 @@ object Netlister {
         fun f(x: Double) = java.math.BigDecimal(x).round(java.math.MathContext(6)).stripTrailingZeros().toString()
         val set = number(load.setting, "setting") ?: 0.0
         val vin = "max($v,0)"
+        val knee = f(ELOAD_DROPOUT * ELOAD_DROPOUT)
+        // Smooth through the dropout knee: a sharp corner there can stall the solver when a
+        // supply in current limit drives the load down into it.
         val law = when (load.mode) {
             // Constant current, falling off as a resistor below the dropout voltage.
-            LoadMode.CC -> "${f(set)}*min(1,$vin/${f(ELOAD_DROPOUT)})"
+            LoadMode.CC -> "${f(set)}*$vin/sqrt($vin*$vin+$knee)"
             LoadMode.CR -> "$vin/${f(maxOf(set, 1e-6))}"
             // A stiff shunt regulator: draws whatever holds its input at the setting.
             LoadMode.CV -> "100*max($v-${f(set)},0)"
-            LoadMode.CP -> "${f(set)}*$vin/max($vin*$vin,${f(ELOAD_DROPOUT * ELOAD_DROPOUT)})"
+            LoadMode.CP -> "${f(set)}*$vin/($vin*$vin+$knee)"
         }
         val gates = mutableListOf<String>()
         number(load.von, "Von")?.takeIf { it > 0 }?.let { gates += "min(1,max(0,($v-${f(it)})/0.1))" }

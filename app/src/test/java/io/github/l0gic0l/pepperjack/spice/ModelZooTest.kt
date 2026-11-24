@@ -277,7 +277,7 @@ class ModelZooTest {
     @Test
     fun electronicLoadsNetlistAsCurrentSinks() {
         val text = Netlister.netlist(ModelZoo.eloadBenches().first { it.name == "eload-cc" }).text
-        assertTrue(text, text.lines().any { it == "BEL1 in 0 I=2*min(1,max(V(in,0),0)/0.5)" })
+        assertTrue(text, text.lines().any { it == "BEL1 in 0 I=2*max(V(in,0),0)/sqrt(max(V(in,0),0)*max(V(in,0),0)+0.25)" })
         val options = Netlister.netlist(ModelZoo.eloadBenches().first { it.name == "eload-options" }).text
         val line = options.lines().single { it.startsWith("BEL1 ") }
         // Von gate, input-on gate, then the triangle sweep from 1 ms to the end of the 2 ms run.
