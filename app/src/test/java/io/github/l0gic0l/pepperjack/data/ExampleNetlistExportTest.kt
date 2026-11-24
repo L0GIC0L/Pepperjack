@@ -14,6 +14,14 @@ import java.util.Locale
  * also written there (as NN-name.<ngbehavior>.cir) for scripts/check-netlists.sh.
  */
 class ExampleNetlistExportTest {
+    /** Live mode shows voltages and currents on the wires, so every schematic example needs some. */
+    @Test
+    fun schematicExamplesHaveWiresForTheLiveView() {
+        Examples.all.map { it.build() }.filter { it.kind == CircuitKind.SCHEMATIC }.forEach { circuit ->
+            assertTrue("${circuit.name} has no wires", circuit.schematic.wires.isNotEmpty())
+        }
+    }
+
     @Test
     fun examplesNetlistWithoutWarnings() {
         val dir = System.getenv("PEPPERJACK_EXPORT_DIR")?.let { File(it).apply { mkdirs() } }

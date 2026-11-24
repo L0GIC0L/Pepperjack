@@ -76,17 +76,21 @@ internal fun scrLatch(): Circuit = Sheet().run {
     supply("VG", -8, 0, "PULSE(0 5 10m 10u 10u 1m 30m)", "trig")
     supply("VRST", -16, 0, "PULSE(5 0 25m 10u 10u 2m 100m)", "hold")
     // RESET: closed while "hold" is high, opened for 2 ms at 25 ms.
-    label(8, -12, "vcc")
-    part(SWITCH, "RESET", 8, -12, value = "PJ_SW")
-    label(6, -11, "hold")
-    ground(6, -9)
-    part(RESISTOR, "R1", 8, -8, value = "470")
-    val lamp = part(LED, "D1", 8, -4, value = "LED_RED")
+    label(8, -15, "vcc")
+    part(SWITCH, "RESET", 8, -15, value = "PJ_SW")
+    label(6, -14, "hold")
+    ground(6, -12)
+    w(8, -11, 8, -10)
+    part(RESISTOR, "R1", 8, -10, value = "470")
+    w(8, -6, 8, -5)
+    val lamp = part(LED, "D1", 8, -5, value = "LED_RED")
+    w(8, -1, 8, 0)
     // Pins: A (8, 0), K (8, 4), G (6, 3).
     part(SCR, "CR1", 8, 0, value = "C106D")
     ground(8, 4)
-    label(2, 3, "trig")
-    part(RESISTOR, "RG", 2, 3, H, "1k")
+    label(1, 3, "trig")
+    part(RESISTOR, "RG", 1, 3, H, "1k")
+    w(5, 3, 6, 3)
     probe(8, 0)
     probeCurrent(lamp)
     part(
@@ -188,11 +192,13 @@ internal fun lm317ELoad(): Circuit = Sheet().run {
 internal fun lissajous(): Circuit = Sheet().run {
     supply("VX", 0, 0, "SIN(0 1 1k)", "x")
     supply("VY", 8, 0, "SIN(0 1 1.5k)", "y")
-    label(16, -2, "x")
+    label(14, -2, "x")
+    w(14, -2, 16, -2)
     part(RESISTOR, "R1", 16, -2, H, "1.59k")
-    label(20, -2, "rc")
-    part(CAPACITOR, "C1", 20, -2, value = "100n")
-    ground(20, 2)
+    w(20, -2, 23, -2)
+    label(23, -2, "rc")
+    part(CAPACITOR, "C1", 23, -2, value = "100n")
+    ground(23, 2)
     part(
         TEXT, "TXT1", 0, 6,
         value = "Run, plot V(y) and V(rc), and set X to V(x). Y at 1.5 times the\n" +
