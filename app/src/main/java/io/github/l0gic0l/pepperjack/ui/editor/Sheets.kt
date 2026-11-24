@@ -49,6 +49,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -68,6 +69,8 @@ import io.github.l0gic0l.pepperjack.data.LibraryModel
 import io.github.l0gic0l.pepperjack.model.AnalysisConfig
 import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.CustomSymbol
+import io.github.l0gic0l.pepperjack.model.ELoadValue
+import io.github.l0gic0l.pepperjack.model.LoadMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartCategory
 import io.github.l0gic0l.pepperjack.model.PartDef
@@ -289,6 +292,7 @@ fun PartEditorSheet(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                ValueEditor.ELOAD -> ELoadEditor(ELoadValue.parse(value)) { value = it.format() }
                 ValueEditor.SPST -> Choice(listOf("open" to "Open", "closed" to "Closed"), if (SwitchValue.isClosed(value)) "closed" else "open") { value = it }
                 ValueEditor.SPDT -> Choice(listOf("A" to "COM to A", "B" to "COM to B"), if (SwitchValue.isB(value)) "B" else "A") { value = it }
                 ValueEditor.LOGIC -> {
@@ -342,6 +346,40 @@ fun PartEditorSheet(
             }
         }
     }
+}
+
+/** An electronic load's settings, as on a bench load's front panel. */
+@Composable
+private fun ELoadEditor(load: ELoadValue, onChange: (ELoadValue) -> Unit) {
+    Choice(LoadMode.entries.map { it.token to it.token }, load.mode.token) { token ->
+        onChange(load.copy(mode = LoadMode.entries.first { it.token == token }))
+    }
+    NumberField("${load.mode.title} (${load.mode.unit})", load.setting) { onChange(load.copy(setting = it.trim())) }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        NumberField("Von (V), blank for none", load.von, Modifier.weight(1f)) { onChange(load.copy(von = it.trim())) }
+        NumberField("Input on at (s)", load.on, Modifier.weight(1f)) { onChange(load.copy(on = it.trim())) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Input on", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = load.input, onCheckedChange = { onChange(load.copy(input = it)) })
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Sweep the setting up and back down over the run", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(
+            checked = load.sweep,
+            enabled = load.mode != LoadMode.CV,
+            onCheckedChange = { onChange(load.copy(sweep = it)) },
+        )
+    }
+    Text(
+        "It draws current in at + and out at −. Below 0.5 V it can't hold a current or power setting " +
+            "and draws as a resistor, as a real load does. With Von it draws only while its input is above " +
+            "Von. \"Input on at\" switches it on partway through a transient, once a supply is up. A sweep " +
+            "takes the setting from nothing up to its value at mid-run and back down (for CR, from no load " +
+            "down to its resistance): plot the voltage against the current for a supply's V–I curve.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 private fun fmtTurns(value: Double): String =

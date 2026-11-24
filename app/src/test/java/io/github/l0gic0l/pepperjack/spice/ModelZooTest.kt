@@ -4,6 +4,8 @@ import io.github.l0gic0l.pepperjack.model.AnalysisConfig
 import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.Circuit
 import io.github.l0gic0l.pepperjack.model.CircuitKind
+import io.github.l0gic0l.pepperjack.model.ELoadValue
+import io.github.l0gic0l.pepperjack.model.LoadMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartKind
 import io.github.l0gic0l.pepperjack.model.PartLibrary
@@ -140,6 +142,32 @@ object ModelZoo {
                 part(PartKind.RESISTOR, "R2", "vcc", "c", value = "1k")
                 part(PartKind.OPTO, "U1", "a", "0", "c", "0", value = model.name)
             }
+            ModelFamily.SCR -> {
+                // The supply ramps (an SCR can latch in a DC operating point), then a gate pulse fires it.
+                part(PartKind.VOLTAGE, "V1", "vcc", "0", value = "PWL(0 0 0.2m 12)")
+                part(PartKind.RESISTOR, "R1", "vcc", "a", value = "100")
+                part(PartKind.VOLTAGE, "V2", "in", "0", value = "PULSE(0 5 0.5m 1u 1u 50u 1)")
+                part(PartKind.RESISTOR, "R2", "in", "g", value = "330")
+                part(PartKind.SCR, "SCR1", "a", "0", "g", value = model.name)
+            }
+            ModelFamily.UJT -> {
+                // A relaxation oscillator.
+                part(PartKind.VOLTAGE, "V1", "vcc", "0", value = "DC 12")
+                part(PartKind.RESISTOR, "R1", "vcc", "e", value = "22k")
+                part(PartKind.CAPACITOR, "C1", "e", "0", value = "100n")
+                part(PartKind.RESISTOR, "R2", "vcc", "b2", value = "470")
+                part(PartKind.RESISTOR, "R3", "b1", "0", value = "47")
+                part(PartKind.UJT, "Q1", "e", "b2", "b1", value = model.name)
+            }
+            ModelFamily.RELAY -> {
+                val volts = model.name.substringAfterLast('-').toDouble()
+                part(PartKind.VOLTAGE, "V1", "coil", "0", value = "PULSE(0 ${volts.toInt()} 0.2m 10u 10u 1m 2m)")
+                part(PartKind.VOLTAGE, "V2", "vcc", "0", value = "DC 5")
+                part(PartKind.RESISTOR, "R1", "vcc", "com", value = "1k")
+                part(PartKind.RESISTOR, "R2", "no", "0", value = "1k")
+                part(PartKind.RESISTOR, "R3", "nc", "0", value = "1k")
+                part(PartKind.RELAY, "K1", "coil", "0", "com", "no", "nc", value = model.name)
+            }
             ModelFamily.CRYSTAL -> {
                 part(PartKind.VOLTAGE, "V1", "in", "0", value = "PULSE(0 1 0 1n 1n 10n 1u)")
                 part(PartKind.RESISTOR, "R1", "in", "a", value = "1k")
@@ -194,8 +222,20 @@ object ModelZoo {
         circuit(AnalysisConfig(type = AnalysisType.TRAN, tranStop = "60m", tranStep = "20u"))
     }
 
+    /** Each electronic-load mode, and the options, on a 12 V supply with 1 Ω of source resistance. */
+    fun eloadBenches(): List<Circuit> = listOf(
+        "cc" to "CC 2", "cr" to "CR 6", "cv" to "CV 9", "cp" to "CP 20", "options" to "CC 3 Von=5 on=1m sweep",
+    ).map { (name, value) ->
+        Bench("eload-$name").run {
+            part(PartKind.VOLTAGE, "V1", "vs", "0", value = "DC 12")
+            part(PartKind.RESISTOR, "R1", "vs", "in", value = "1")
+            part(PartKind.ELOAD, "EL1", "in", "0", value = value)
+            circuit(tran)
+        }
+    }
+
     fun benches(): List<Circuit> =
-        SpiceModels.models.mapNotNull { benchFor(it) } + logicBench() + interactiveBench()
+        SpiceModels.models.mapNotNull { benchFor(it) } + logicBench() + interactiveBench() + eloadBenches()
 }
 
 /**
@@ -232,6 +272,26 @@ class ModelZooTest {
         assertTrue(text, text.lines().any { it == "VLCD1 pm pl 0" })
         assertTrue(text, text.lines().any { it == "RLCD2 pl 0 10Meg" })
         assertTrue(text, text.lines().none { it.contains("TXT1", ignoreCase = true) || it.contains("passives") && !it.startsWith("*") })
+    }
+
+    @Test
+    fun electronicLoadsNetlistAsCurrentSinks() {
+        val text = Netlister.netlist(ModelZoo.eloadBenches().first { it.name == "eload-cc" }).text
+        assertTrue(text, text.lines().any { it == "BEL1 in 0 I=2*max(V(in,0),0)/sqrt(max(V(in,0),0)*max(V(in,0),0)+0.25)" })
+        val options = Netlister.netlist(ModelZoo.eloadBenches().first { it.name == "eload-options" }).text
+        val line = options.lines().single { it.startsWith("BEL1 ") }
+        // Von gate, input-on gate, then the triangle sweep from 1 ms to the end of the 2 ms run.
+        assertTrue(line, line.contains("min(1,max(0,(V(in,0)-5)/0.1))"))
+        assertTrue(line, line.contains("min(1,max(0,(time-0.001)/1e-5))"))
+        assertTrue(line, line.contains("max(0,1-abs(2*(time-0.001)/0.001-1))"))
+    }
+
+    @Test
+    fun electronicLoadValuesRoundTrip() {
+        val load = ELoadValue.parse("cp 50 sweep Von=10 on=30m")
+        assertEquals(ELoadValue(LoadMode.CP, "50", von = "10", on = "30m", sweep = true), load)
+        assertEquals("CP 50 Von=10 on=30m sweep", load.format())
+        assertEquals(ELoadValue(LoadMode.CC, "1"), ELoadValue.parse(""))
     }
 
     @Test

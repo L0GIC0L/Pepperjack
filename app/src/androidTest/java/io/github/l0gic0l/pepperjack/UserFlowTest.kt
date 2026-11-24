@@ -185,6 +185,10 @@ class UserFlowTest {
         waitWithFrames { rule.onAllNodes(hasText("Closed")).fetchSemanticsNodes().isNotEmpty() }
         rule.onNodeWithContentDescription("SW1 switch").performClick()
         waitWithFrames { rule.onAllNodes(hasText("Open")).fetchSemanticsNodes().isNotEmpty() }
+        // On a phone the panel is docked under the sheet, and folds down to its bar.
+        rule.onNodeWithContentDescription("Fold the live panel").performClick()
+        waitWithFrames { rule.onAllNodes(hasTestTag(LIVE_CONTROLS)).fetchSemanticsNodes().isEmpty() }
+        rule.onNodeWithContentDescription("Open the live panel").assertExists()
         rule.onAllNodes(isRoot(), useUnmergedTree = true).printToLog("PepperjackTree")
     }
 

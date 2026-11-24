@@ -3,7 +3,9 @@ package io.github.l0gic0l.pepperjack.spice
 import io.github.l0gic0l.pepperjack.data.LibraryModel
 import io.github.l0gic0l.pepperjack.model.AnalysisType
 import io.github.l0gic0l.pepperjack.model.Circuit
+import io.github.l0gic0l.pepperjack.model.ELoadValue
 import io.github.l0gic0l.pepperjack.model.GridPoint
+import io.github.l0gic0l.pepperjack.model.LoadMode
 import io.github.l0gic0l.pepperjack.model.Part
 import io.github.l0gic0l.pepperjack.model.PartDef
 import io.github.l0gic0l.pepperjack.model.PartKind
@@ -302,6 +304,12 @@ object Netlister {
                 PartKind.AMMETER, PartKind.LCD_AMMETER -> elements += "$name $nodes 0"
                 PartKind.VOLTMETER, PartKind.LCD_VOLTMETER -> elements += "$name $nodes ${valueOrDefault()}"
                 PartKind.SPST -> elements += "$name $nodes ${if (SwitchValue.isClosed(value)) CLOSED else OPEN}"
+                PartKind.ELOAD -> {
+                    val load = ELoadValue.parse(valueOrDefault())
+                    val stop = Si.parse(circuit.analysis.tranStop)?.takeIf { circuit.analysis.type == AnalysisType.TRAN }
+                    val current = eloadCurrent(load, "V(${nets[0]},${nets[1]})", stop) { warnings += "${part.ref}: $it" }
+                    elements += "$name $nodes I=$current"
+                }
                 PartKind.SPDT -> {
                     val toB = SwitchValue.isB(value)
                     elements += "${name}_a ${nets[0]} ${nets[1]} ${if (toB) OPEN else CLOSED}"
@@ -452,6 +460,47 @@ object Netlister {
             appendLine(".end")
         }
         return NetlistResult(text, warnings.distinct(), probeVectors, pinNets, pinCurrents, liveAnalysis)
+    }
+
+    /** Below this an electronic load can't hold its setting: it draws as a resistor down to 0 V. */
+    private const val ELOAD_DROPOUT = 0.5
+
+    /**
+     * An electronic load's current, as a B-source expression in its input voltage [v]: the
+     * mode's law, times a gate for Von and for when its input turns on, times the sweep (a
+     * triangle from nothing up to the setting at mid-run and back, over a transient of [stop]
+     * seconds). A setting that isn't a number is reported through [warn] and taken as 0.
+     */
+    internal fun eloadCurrent(load: ELoadValue, v: String, stop: Double?, warn: (String) -> Unit = {}): String {
+        if (!load.input) return "0"
+        fun number(text: String, what: String): Double? {
+            if (text.isBlank()) return null
+            return Si.parse(text) ?: run { warn("$what \"$text\" is not a number"); null }
+        }
+        // Plain numbers: an expression is no place for SPICE suffixes like Meg.
+        fun f(x: Double) = java.math.BigDecimal(x).round(java.math.MathContext(6)).stripTrailingZeros().toString()
+        val set = number(load.setting, "setting") ?: 0.0
+        val vin = "max($v,0)"
+        val knee = f(ELOAD_DROPOUT * ELOAD_DROPOUT)
+        // Smooth through the dropout knee: a sharp corner there can stall the solver when a
+        // supply in current limit drives the load down into it.
+        val law = when (load.mode) {
+            // Constant current, falling off as a resistor below the dropout voltage.
+            LoadMode.CC -> "${f(set)}*$vin/sqrt($vin*$vin+$knee)"
+            LoadMode.CR -> "$vin/${f(maxOf(set, 1e-6))}"
+            // A stiff shunt regulator: draws whatever holds its input at the setting.
+            LoadMode.CV -> "100*max($v-${f(set)},0)"
+            LoadMode.CP -> "${f(set)}*$vin/($vin*$vin+$knee)"
+        }
+        val gates = mutableListOf<String>()
+        number(load.von, "Von")?.takeIf { it > 0 }?.let { gates += "min(1,max(0,($v-${f(it)})/0.1))" }
+        val on = number(load.on, "on time")?.takeIf { it > 0 }
+        on?.let { gates += "min(1,max(0,(time-${f(it)})/1e-5))" }
+        if (load.sweep && load.mode != LoadMode.CV && stop != null) {
+            val start = on ?: 0.0
+            if (stop > start) gates += "max(0,1-abs(2*(time-${f(start)})/${f(stop - start)}-1))"
+        }
+        return (listOf(law) + gates).joinToString("*")
     }
 
     private const val CLOSED = "1m"

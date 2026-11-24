@@ -22,6 +22,7 @@ enum class PartKind {
     TEXT, LCD_VOLTMETER, LCD_AMMETER,
     SCHOTTKY, NJFET, PJFET,
     COMPARATOR, REGULATOR, REGULATOR_ADJ, TIMER555, OPTO,
+    SCR, UJT, RELAY, ELOAD,
     AND, NAND, OR, NOR, XOR, NOT, SCHMITT, DFF,
     CUSTOM,
 }
@@ -39,7 +40,7 @@ enum class PartCategory(val title: String) {
 }
 
 /** How the properties sheet edits a part's value. */
-enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE, NOTE }
+enum class ValueEditor { NONE, TEXT, EXPRESSION, SOURCE, MODEL, LABEL, POT, TRANSFORMER, SPST, SPDT, LOGIC, PARAMS, PROBE, NOTE, ELOAD }
 
 data class PinDef(val name: String, val x: Int, val y: Int)
 
@@ -80,6 +81,8 @@ data class PartDef(
     val editor: ValueEditor = ValueEditor.TEXT,
     /** Symbols that show their state (switch positions) draw these instead of [shapes]. */
     val stateShapes: ((String) -> List<Shape>)? = null,
+    /** A relay pulled in during a live run draws these. */
+    val energizedShapes: List<Shape>? = null,
 ) {
     val hasValue: Boolean get() = editor != ValueEditor.NONE
     val emitsSpice: Boolean get() = kind != PartKind.GROUND && kind != PartKind.LABEL && kind != PartKind.PROBE && kind != PartKind.TEXT
@@ -274,6 +277,43 @@ object PartLibrary {
         return shapes
     }
 
+    /** A diode with a gate lead from the cathode end, out to the left: an SCR. */
+    private val scrBody: List<Shape> = diodeBody(line(-0.6, 2.5, 0.6, 2.5)) +
+        listOf(line(-0.2, 2.55, -1, 3), line(-1, 3, -2, 3))
+
+    /** A base bar with B2 above and B1 below, and the emitter slanting into it with its arrow. */
+    private val ujtBody: List<Shape> = listOf(
+        line(0.3, -1, 0.3, 1),
+        line(0.3, -0.7, 1, -0.7), line(1, -0.7, 1, -2),
+        line(0.3, 0.7, 1, 0.7), line(1, 0.7, 1, 2),
+        line(-2, 1, -1, 1), line(-1, 1, 0.3, 0.15),
+        arrowHead(-1f, 1f, 0.25f, 0.18f),
+        label(1.45, -1.55, "B2", 0.5f, GlyphAlign.START), label(1.45, 1.55, "B1", 0.5f, GlyphAlign.START),
+    )
+
+    /**
+     * A coil on the left and a changeover contact on the right, resting on NC, with the dashed
+     * link between them.
+     */
+    private val relayBody: List<Shape> = relayShapes(energized = false)
+
+    /** A relay with its blade on NC, or (energised) on NO. */
+    private fun relayShapes(energized: Boolean): List<Shape> = buildList {
+        add(line(-2, 0, -2, 1)); add(line(-2, 3, -2, 4))
+        (0 until 4).forEach { add(arc(-2f, 1.25f + 0.5f * it, 0.25f, -90f, 180f)) }
+        add(line(2, 4, 2, 2.6))
+        add(Shape.Circle(2f, 2.6f, 0.12f, filled = true))
+        add(if (energized) line(2, 2.6, 2.9, 1.25) else line(2, 2.6, 1.1, 1.05))
+        add(line(1, 0, 1, 1)); add(line(0.75, 1, 1.25, 1))
+        add(line(3, 0, 3, 1.2)); add(line(2.75, 1.2, 3.25, 1.2))
+        // The link from the coil to the blade, dashed.
+        for (i in 0 until 5) {
+            val x0 = -1.5f + i * 0.62f
+            add(line(x0, 2.0, x0 + 0.35f, 2.0))
+        }
+        add(label(1, -0.55, "NC", 0.45f)); add(label(3, -0.55, "NO", 0.45f))
+    }
+
     private fun mosfet(pmos: Boolean): List<Shape> {
         val sourceY = if (pmos) -0.65f else 0.65f
         val drainY = -sourceY
@@ -309,6 +349,17 @@ object PartLibrary {
         line(0, 0, 0, 1), Shape.Circle(0f, 2f, 1f), line(0, 3, 0, 4),
         Shape.Glyph(0f, 2f, letter, 1f),
     ) + plus(0.75f, 0.75f, 0.15f)
+
+    /**
+     * A bench electronic load: a box drawing current in at + (the arrow) and out at −, with its
+     * mode (CC, CR, CV or CP) on its face.
+     */
+    private fun eloadShapes(value: String) = listOf(
+        line(0, 0, 0, 0.6), line(0, 3.4, 0, 4),
+        rect(-1.8, 0.6, 1.8, 3.4),
+        line(-1.05, 1.1, -1.05, 2.55), arrowHead(-1.05f, 1.1f, -1.05f, 2.9f),
+        Shape.Glyph(0.45f, 2f, ELoadValue.parse(value).mode.token, 0.9f),
+    ) + plus(0.55f, 0.25f, 0.15f)
 
     /** A panel meter: a wide LCD, fed from + at the top and − at the bottom. */
     private fun lcd(unit: String) = listOf(
@@ -463,6 +514,18 @@ object PartLibrary {
             twoPins, lcd("A"), editor = ValueEditor.NONE,
         ),
         PartDef(
+            PartKind.RELAY, "Relay", "X", "K", PartCategory.INTERACTIVE, "G5LE-1-12", "Model", "Relay model",
+            // Subcircuit port order: coil, coil, common, normally open, normally closed.
+            listOf(PinDef("C1", -2, 0), PinDef("C2", -2, 4), PinDef("COM", 2, 4), PinDef("NO", 3, 0), PinDef("NC", 1, 0)),
+            relayBody, families = listOf(ModelFamily.RELAY), editor = ValueEditor.MODEL,
+            energizedShapes = relayShapes(energized = true),
+        ),
+        PartDef(
+            PartKind.ELOAD, "Electronic load", "B", "EL", PartCategory.INTERACTIVE, ELoadValue.DEFAULT, "Setting",
+            "CC 6 (amps), CR 2.5 (ohms), CV 12 (volts) or CP 50 (watts)",
+            sourcePins, eloadShapes(ELoadValue.DEFAULT), editor = ValueEditor.ELOAD, stateShapes = ::eloadShapes,
+        ),
+        PartDef(
             PartKind.PROBE, "Measurement probe", "", "PR", PartCategory.INTERACTIVE, ProbeValue.DEFAULT, "Readings",
             "Place it on a wire: it reads the voltage there and the current along the wire",
             listOf(PinDef("P", 0, 0)),
@@ -529,6 +592,18 @@ object PartLibrary {
             PartKind.PMOS, "P-channel MOSFET", "M", "M", PartCategory.SEMICONDUCTOR, "BS250", "Model", "MOSFET model name",
             listOf(PinDef("D", 1, 2), PinDef("G", -2, 0), PinDef("S", 1, -2)), mosfet(pmos = true),
             families = listOf(ModelFamily.PMOS), editor = ValueEditor.MODEL,
+        ),
+        PartDef(
+            PartKind.SCR, "SCR (thyristor)", "X", "SCR", PartCategory.SEMICONDUCTOR, "2N6504", "Model", "SCR model",
+            // Subcircuit port order: anode, cathode, gate.
+            listOf(PinDef("A", 0, 0), PinDef("K", 0, 4), PinDef("G", -2, 3)), scrBody,
+            families = listOf(ModelFamily.SCR), editor = ValueEditor.MODEL,
+        ),
+        PartDef(
+            PartKind.UJT, "Unijunction transistor", "X", "Q", PartCategory.SEMICONDUCTOR, "2N2646", "Model", "UJT model",
+            // Subcircuit port order: emitter, base 2, base 1.
+            listOf(PinDef("E", -2, 1), PinDef("B2", 1, -2), PinDef("B1", 1, 2)), ujtBody,
+            families = listOf(ModelFamily.UJT), editor = ValueEditor.MODEL,
         ),
 
         // ---- analog ICs ----

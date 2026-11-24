@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ShowChart
+import androidx.compose.material.icons.outlined.ArrowDropDown
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -32,6 +33,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -53,6 +56,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -231,7 +236,11 @@ private fun PlotView(
         }
     }
     val xs = { plot: Plot -> plot.scale?.real ?: DoubleArray(plot.vectors.firstOrNull()?.size ?: 0) { it.toDouble() } }
-    val xUnit = scale?.quantity?.unit ?: ""
+    // An XY plot: another trace as the x axis in place of time or the sweep, e.g. V(out) against I(load).
+    var xName by rememberSaveable(kind) { mutableStateOf<String?>(null) }
+    val xVector = xName?.takeIf { kind != PlotKind.AC }?.let { name -> first.vectors.firstOrNull { it.name == name } }
+    val chartX = { plot: Plot -> xVector?.let { v -> plot.vectors.firstOrNull { it.name == v.name }?.real } ?: xs(plot) }
+    val xUnit = xVector?.quantity?.unit ?: scale?.quantity?.unit ?: ""
     val logX = kind == PlotKind.AC && first.scale?.real?.all { it > 0 } == true
 
     Column(Modifier.fillMaxSize()) {
@@ -243,6 +252,9 @@ private fun PlotView(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (kind == PlotKind.TRAN || kind == PlotKind.DC) {
+                XAxisMenu(scale?.label?.replaceFirstChar { it.uppercase() } ?: "Time", first.vectors.filterNot { it.isInternal }, xVector) { xName = it?.name; window.reset(); cursors.clear() }
+            }
             if (kind == PlotKind.TRAN && series.isNotEmpty()) MeasureMenu(measureMask) { measureMask = it }
             if (cursors.a != null || cursors.b != null) TextButton(onClick = { cursors.clear() }) { Text("Clear cursors") }
             IconButton(onClick = onExport) { Icon(Icons.Outlined.IosShare, contentDescription = "Export CSV") }
@@ -267,11 +279,11 @@ private fun PlotView(
                 }
             } else {
                 val unit = series.map { it.vector.quantity }.distinct().singleOrNull()?.unit ?: ""
-                val traceList = series.map { s -> Trace(s.label, s.color, xs(s.plot), s.vector.real) }
-                WaveformChart(traceList, xUnit, unit, logX, cursors, window, chartColors, Modifier.fillMaxSize())
+                val traceList = series.map { s -> Trace(s.label, s.color, chartX(s.plot), s.vector.real) }
+                WaveformChart(traceList, xUnit, unit, logX, cursors, window, chartColors, Modifier.fillMaxSize(), xy = xVector != null)
             }
         }
-        if (series.isNotEmpty() && (cursors.a != null || cursors.b != null)) {
+        if (series.isNotEmpty() && xVector == null && (cursors.a != null || cursors.b != null)) {
             CursorReadout(series.map { Triple(it.label, it.color, it) }.map { (label, color, s) ->
                 ReadoutRow(label, color, s.vector, xs(s.plot), kind == PlotKind.AC)
             }, cursors, xUnit)
@@ -319,6 +331,31 @@ private fun PlotView(
                         null
                     },
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Picks the x axis: the plot's own scale (time, or the swept source), or any trace, which
+ * makes an XY plot of the chosen traces against it.
+ */
+@Composable
+private fun XAxisMenu(scaleLabel: String, vectors: List<Vector>, selected: Vector?, onSelect: (Vector?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = selected != null,
+            onClick = { open = true },
+            label = { Text("X: ${selected?.label ?: scaleLabel}", maxLines = 1) },
+            trailingIcon = { Icon(Icons.Outlined.ArrowDropDown, contentDescription = null, Modifier.size(18.dp)) },
+            modifier = Modifier.padding(end = 4.dp).semantics { contentDescription = "X axis" },
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text(scaleLabel) }, onClick = { onSelect(null); open = false })
+            HorizontalDivider()
+            vectors.forEach { v ->
+                DropdownMenuItem(text = { Text(v.label) }, onClick = { onSelect(v); open = false })
             }
         }
     }

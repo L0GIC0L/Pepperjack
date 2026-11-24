@@ -40,6 +40,7 @@ import io.github.l0gic0l.pepperjack.model.LCD_SCREEN
 import io.github.l0gic0l.pepperjack.model.isAmmeter
 import io.github.l0gic0l.pepperjack.model.isLcd
 import io.github.l0gic0l.pepperjack.model.isMeter
+import io.github.l0gic0l.pepperjack.data.TagDetail
 import io.github.l0gic0l.pepperjack.model.Probe
 import io.github.l0gic0l.pepperjack.model.ProbeType
 import io.github.l0gic0l.pepperjack.model.ProbeValue
@@ -55,7 +56,8 @@ import kotlin.math.log10
 import kotlin.math.pow
 import kotlin.math.sqrt
 
-enum class LiveColorMode(val label: String) { VOLTAGE("Voltage"), CURRENT("Current") }
+/** What the wires' colours show; [short] is the label where there is no room for [label]. */
+enum class LiveColorMode(val label: String, val short: String) { VOLTAGE("Voltage", "V"), CURRENT("Current", "I") }
 
 /**
  * Plays a [LiveView] back: a transient loops in slow motion (the whole run takes
@@ -168,6 +170,8 @@ fun LiveOverlay(
     modifier: Modifier = Modifier,
     /** Trace colours, for the probes' tags. */
     probeColors: Map<Probe, Color> = emptyMap(),
+    tagDetail: TagDetail = TagDetail.FULL,
+    selectedPartId: Long? = null,
 ) {
     val palette = rememberLivePalette()
     val textMeasurer = rememberTextMeasurer()
@@ -183,7 +187,7 @@ fun LiveOverlay(
     Canvas(modifier.clipToBounds()) {
         animator.frame // redraw every frame
         if (viewport.scale == 0f) return@Canvas
-        drawLive(animator, schematic, viewport, mode, inspectWireId, palette, textMeasurer, probeColors)
+        drawLive(animator, schematic, viewport, mode, inspectWireId, palette, textMeasurer, probeColors, tagDetail, selectedPartId)
     }
 }
 
@@ -196,6 +200,8 @@ private fun DrawScope.drawLive(
     palette: LivePalette,
     textMeasurer: TextMeasurer,
     probeColors: Map<Probe, Color>,
+    tagDetail: TagDetail,
+    selectedPartId: Long?,
 ) {
     val view = animator.view
     val transform = viewport.transform
@@ -256,6 +262,8 @@ private fun DrawScope.drawLive(
     )
     view.readouts.filter { it.kind.isMeter }.forEach { readout ->
         val part = schematic.parts.firstOrNull { it.id == readout.partId } ?: return@forEach
+        // Hidden tags hide a round meter's reading too (not a selected one); an LCD's digits are its face.
+        if (!part.kind.isLcd && tagDetail == TagDetail.OFF && part.id != selectedPartId) return@forEach
         val text = meterText(part.meter, readout, view, position)
         if (part.kind.isLcd) {
             drawLcd(textMeasurer, text, part, transform)
@@ -268,15 +276,20 @@ private fun DrawScope.drawLive(
     // Measurement probes show their readings in a tag, as Multisim's probes do.
     val transient = view.duration > 0
     val occupied = ArrayList<androidx.compose.ui.geometry.Rect>()
+    val obstacles = if (view.probes.isEmpty()) emptyList() else partRects(schematic, transform)
     view.probes.forEach { probe ->
         val part = schematic.parts.firstOrNull { it.id == probe.partId } ?: return@forEach
+        val level = tagDetailFor(part, tagDetail, selectedPartId)
+        if (level == TagDetail.OFF) return@forEach
         val voltage = probe.voltage?.let { ProbeQuantity(LiveView.sample(it, position), if (transient) view.stats(probe, false) else null) }
         val current = probe.current?.let {
             ProbeQuantity(LiveView.sample(it, position), if (transient) view.stats(probe, true) else null, probe.direction)
         }
-        val lines = probeLines(ProbeValue.parse(part.value), voltage, current, transient)
+        val readings = ProbeValue.parse(part.value)
+        val compact = level == TagDetail.COMPACT
+        val lines = if (compact) listOf(probeCompactLine(readings, voltage, current, transient)) else probeLines(readings, voltage, current, transient)
         val accent = probeColors[Probe(ProbeType.VOLTAGE, part.x, part.y)] ?: palette.hot
-        drawProbeTag(textMeasurer, part.ref, lines, accent, palette, probeHead(part, transform), occupied)
+        drawProbeTag(textMeasurer, part.ref, lines, accent, palette, probeHead(part, transform), occupied, compact, obstacles)
     }
 
     inspectWireId?.let { id ->
@@ -352,7 +365,7 @@ private fun DrawScope.drawTag(
     drawText(layout, topLeft = topLeft + Offset(pad, pad / 2))
 }
 
-private fun ledColor(model: String): Color {
+internal fun ledColor(model: String): Color {
     val name = model.uppercase()
     return when {
         "GREEN" in name -> Color(0xFF00E676)

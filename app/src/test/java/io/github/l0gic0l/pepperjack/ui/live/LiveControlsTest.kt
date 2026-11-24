@@ -17,6 +17,7 @@ import io.github.l0gic0l.pepperjack.sim.LiveReadout
 import io.github.l0gic0l.pepperjack.sim.LiveTrace
 import io.github.l0gic0l.pepperjack.sim.LiveView
 import io.github.l0gic0l.pepperjack.sim.Quantity
+import io.github.l0gic0l.pepperjack.ui.editor.toolbarButtonSize
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -26,6 +27,20 @@ import kotlin.math.sin
 
 class LiveControlsTest {
     private fun part(kind: PartKind, value: String) = Part(1, kind, "X1", 0, 0, value = value)
+
+    @Test
+    fun toolbarButtonsNarrowToFitAPhone() {
+        // Full size where there is room for eight of them, the divider and the padding.
+        assertEquals(48.dp, toolbarButtonSize(600.dp))
+        // A 411 dp phone leaves the toolbar 395 dp, a 360 dp one 344 dp: all of it fits both.
+        for (width in listOf(395.dp, 344.dp)) {
+            val size = toolbarButtonSize(width)
+            assertTrue("$size across $width", size * 8 + 21.dp <= width)
+            assertTrue("$size is too small to hit", size >= 40.dp)
+        }
+        // Never so narrow that they can't be hit: below that the toolbar scrolls.
+        assertEquals(36.dp, toolbarButtonSize(200.dp))
+    }
 
     @Test
     fun controlsListKnobsAndSwitchesInSheetOrder() {
@@ -140,5 +155,28 @@ class LiveControlsTest {
         assertEquals("f   1.00 kHz", lines[2])
         // An operating point has no waveform: just the values.
         assertEquals(listOf("V   5.00 V"), probeLines(all - io.github.l0gic0l.pepperjack.model.ProbeReading.CURRENT, ProbeQuantity(5.0, null), null, transient = false))
+    }
+
+    @Test
+    fun compactTagsAreOneLineAndLeaveOutLeakageCurrents() {
+        val all = io.github.l0gic0l.pepperjack.model.ProbeValue.parse("V I PP RMS")
+        val stats = io.github.l0gic0l.pepperjack.sim.WaveStats(0.0, 4.8, 2.4, 3.39, 1000.0)
+        // Live: the readings now.
+        assertEquals("4.80 V  16.8 mA", probeCompactLine(all, ProbeQuantity(4.8, stats), ProbeQuantity(16.8e-3, null, "→"), transient = true))
+        // After a run: the first measurement it was set to show.
+        assertEquals("p-p 4.80 V", probeCompactLine(all, ProbeQuantity(null, stats), null, transient = true))
+        // A probe on a net that carries only picoamps: no current, in either kind of tag.
+        val leak = ProbeQuantity(5e-12, io.github.l0gic0l.pepperjack.sim.WaveStats(-5e-12, 5e-12, 0.0, 3.5e-12, null))
+        assertEquals("4.80 V", probeCompactLine(all, ProbeQuantity(4.8, stats), leak, transient = true))
+        assertEquals(1, probeLines(all, ProbeQuantity(4.8, stats), leak, transient = true).size)
+    }
+
+    @Test
+    fun tagDetailStepsThroughEveryLevelAndASelectedProbeShowsAll() {
+        val levels = generateSequence(io.github.l0gic0l.pepperjack.data.TagDetail.COMPACT) { it.next }.take(4).toList()
+        assertEquals(listOf("COMPACT", "FULL", "OFF", "COMPACT"), levels.map { it.name })
+        val probe = Part(7, PartKind.PROBE, "PR1", 0, 0)
+        assertEquals(io.github.l0gic0l.pepperjack.data.TagDetail.FULL, tagDetailFor(probe, io.github.l0gic0l.pepperjack.data.TagDetail.OFF, selectedPartId = 7))
+        assertEquals(io.github.l0gic0l.pepperjack.data.TagDetail.OFF, tagDetailFor(probe, io.github.l0gic0l.pepperjack.data.TagDetail.OFF, selectedPartId = 8))
     }
 }

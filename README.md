@@ -57,15 +57,29 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   peak-to-peak value over the run. Tap a wire to read its node voltage and
   current.
 - Interactive parts: tap a toggle or changeover switch to flip it, and drag
-  the slider of a selected potentiometer.
+  the slider of a selected potentiometer. Relays move their contacts as their
+  coils pull in and drop out during the run.
+- Electronic load, like a bench DC load: constant current, resistance,
+  voltage or power, with an input switch, an optional Von (it draws only
+  above that voltage), a time to switch its input on partway through a run
+  (once a supply is up), and a sweep that takes the setting from nothing up
+  to its value at mid-run and back. Below 0.5 V it can't hold a current or
+  power setting and draws as a resistor, as a real load does. Its Controls
+  row has the mode, a knob over the setting, the input switch, and its
+  display of volts and amps.
 - LCD meters: an LCD voltmeter or ammeter shows its reading in big
   four-digit figures on the sheet, readable even zoomed out, where other text
   is hidden.
+- The live panel: the playback bar with the Controls and Scope tabs under it.
+  On a phone it is docked below the sheet, which fits itself into the room
+  above; drag the panel's bar to give it more or less of the screen, right
+  down to just the bar. With two panes (an unfolded foldable, a tablet,
+  landscape) it takes the second pane, and the sheet has the first whole.
 - Controls: on a sheet with knobs or switches, the live panel opens on a
-  front panel of every potentiometer and switch, under the sheet's LCD
-  meters (or, if it has none, every meter's reading), so a big circuit can be
-  worked without hunting for its parts. Scope is the other tab, and the panel
-  and the hint above the sheet fold away for room.
+  front panel of every potentiometer, switch and electronic load, under the
+  sheet's LCD meters (or, if it has none, every meter's reading) and its LEDs
+  as indicator lamps, so a big circuit can be worked without hunting for its
+  parts. Scope is the other tab.
 - Value knobs: select a resistor, capacitor, inductor or DC source and a
   slider sweeps its value (a decade either way for R, C and L, logarithmic;
   zero to twice the level for a source). One turn is one undo step.
@@ -80,6 +94,12 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - Cursors: two time cursors, A and B, to drag or tap into place. The table
     shows each channel at A and at B and the difference, with Δt and 1/Δt,
     and the measurements then cover only the time between the cursors.
+- Probe tags at three levels of detail, set by the Tags button on the sheet:
+  compact (one line each: the name and the reading now), full (every reading
+  the probe was set to show) or hidden. A selected probe always shows all of
+  its readings. A current line is left out where the current never reaches a
+  nanoamp (a probe on a net into a source or a gate), and tags are placed
+  clear of the parts where there is room.
 - Measurement probes, like Multisim's: place one on a wire (from the parts
   tray, with the probe tool, or with Plot on a tapped wire) and it shows the
   voltage there and the current along the wire, now and as peak to peak,
@@ -93,14 +113,14 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   the plots update too.
 
 **Schematic editor**
-- 49 symbols:
+- 53 symbols:
   - Passives: R, L, C, potentiometer, transformer, crystal.
   - Sources: voltage and current sources (DC, AC, sine, pulse, any SPICE
     source).
-  - Switches and meters: toggle and changeover switches, ammeter, voltmeter,
-    LCD ammeter and voltmeter, measurement probe.
+  - Switches and meters: toggle and changeover switches, relay, ammeter,
+    voltmeter, LCD ammeter and voltmeter, measurement probe, electronic load.
   - Semiconductors: diode, Schottky, zener, LED, NPN, PNP, N/P JFETs, N/P
-    MOSFETs.
+    MOSFETs, SCR, unijunction transistor.
   - ICs: ideal op-amp, op-amp, comparator, fixed and adjustable regulators,
     555 timer, optocoupler.
   - Digital logic: AND, NAND, OR, NOR, XOR, inverter, Schmitt inverter, D
@@ -116,22 +136,26 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   - LM393/LM311 comparators.
   - 78xx/79xx, LM317/LM337 and LDO regulators, and the TL431 reference.
   - NE555/TLC555, PC817/4N35, and crystals.
+  - SCRs (2N681, 2N6504, C106D, 2N5064), 2N2646/2N2647 unijunctions, and 5–24 V
+    relays.
 
   Discretes use datasheet-typical parameters. ICs are behavioural
   macro-models of the datasheet headline figures: gain-bandwidth, slew rate,
   output swing, dropout, current limit and propagation delay. Every model is
   checked in ngspice on each commit.
-- 50 examples in ten categories, searchable, with the ones made for live mode
+- 57 examples in ten categories, searchable, with the ones made for live mode
   marked: basics (divider, Kirchhoff, Wheatstone bridge, RC and RL steps),
   filters (RC, RLC, Sallen-Key, twin-T notch), diodes (half-wave and bridge
-  rectifiers, zener regulator, clipper, clamp, doubler), transistors
-  (common-emitter, emitter follower, current mirror, differential pair,
-  push-pull, relay driver with flyback diode), op-amps (inverting, summing,
-  integrator, instrumentation amplifier, Schmitt trigger, precision
-  rectifier), oscillators (555 astable and one-shot, two-transistor astable,
-  relaxation, Wien bridge), power (7805, LM317, boost converter, a triple
-  bench supply), logic (half
-  adder, SR latch, ripple counter), a 4–20 mA current loop, and SPICE
+  rectifiers, zener regulator, clipper, clamp, doubler, a diode's I–V curve
+  in XY), transistors (common-emitter, emitter follower, current mirror,
+  differential pair, push-pull, relay driver with flyback diode, an SCR latch
+  with reset), op-amps (inverting, summing, integrator, instrumentation
+  amplifier, Schmitt trigger, precision rectifier), oscillators (555 astable
+  and one-shot, two-transistor astable, relaxation, Wien bridge, UJT
+  relaxation, Lissajous figures in XY), power (7805, LM317, boost converter,
+  a triple bench supply, a 1970s 15 V system supply, an LM317 on an
+  electronic load), logic (half adder, SR latch, ripple counter), a 4–20 mA
+  current loop, a relay start/stop circuit with a seal-in contact, and SPICE
   netlists in each dialect.
 - A triple bench supply from one 24 V input: +0–20 V and −0–20 V at 0.7 A and
   0–5 V at 1 A, each isolated by its own DC-DC module, with a knob each for
@@ -140,6 +164,23 @@ Pepperjack also fills two LTspice gaps that ngspice has:
   parts. Each channel has an LCD voltmeter and ammeter, and text boxes say
   what is what; in live mode, set it from Controls: VSETn, ISETn and OVPSETn
   for each channel's volts, current limit and OVP level, and RESETn.
+- A 1970s 15 V, 0–12 A system power supply (E92-331 Figure 11), part for part
+  from the manual's parts list: a bridge into 28,000 µF, four 2N3771s, a
+  discrete error amplifier on a 1N825 reference, foldback current limit, a
+  2N2646 UJT that fires a 2N681 SCR crowbar at 17.5 V, and a relay that drops
+  out below 12.5 V. As in the original, only the crowbar takes the output down:
+  the relay's contacts only signal the system, and the current limit folds back
+  along the manual's Figure 10 to 3 A into a short. Its test points A–J read the manual's voltage table at no
+  load and at 6 A. Switch in LOAD1 and LOAD2 (6 A each) or SHORT in live mode:
+  they connect 30 ms into each run, once the output is up and K1 has pulled in,
+  so an overload shows K1 dropping out (the green lamp goes out, the red one
+  lights, and K1's contact moves). Its electronic load EL1, switched on in
+  Controls, sweeps 0–16 A and back in constant current: past the knee the
+  output locks at about 0 V and 3 A until the load asks for less than that,
+  as a foldback supply does on a bench load;
+  the trimmers are R22 (output), R15 (current limit), R29 (high limit) and R36
+  (low limit). T1's ratings aren't listed, so 118 V : 25.3 V is chosen to match
+  test point A, and a 9 V relay stands in for the mercury-wetted K1.
 - The largest is channel A of a Foxboro SPEC 200 2AI-P2V RTD-to-0–10 V
   converter, laid out after the MI 2AI-185 component diagram, with a 3-wire
   Pt100 bridge, a JFET chopper amplifier and a transformer-isolated output.
@@ -204,6 +245,9 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 
 **Results**
 - Waveforms with pinch zoom on each axis, pan, and two cursors with Δ and 1/Δ.
+- XY plots: set the x axis of a transient or DC sweep to any trace, and the
+  chosen traces plot against it, such as a supply's output voltage against
+  its load current, or a Lissajous figure.
 - Measure on a transient: the same measurements as the scope (mean, RMS, AC
   RMS, peak to peak, min, max, frequency, period) for every plotted trace,
   over the run or between cursors A and B.
@@ -217,7 +261,11 @@ Pepperjack also fills two LTspice gaps that ngspice has:
 - Unfolded foldables and tablets show the editor and results side by side,
   split exactly at the hinge when it separates the screen. In tabletop posture
   the plots sit above the fold and the editor below it, where it is easy to
-  touch. Mouse-wheel zoom works on DeX, Chromebooks and tablets with a
+  touch. While live, the second pane is the live panel's, with Results a tab
+  away.
+- On a narrow phone the tool palette's buttons narrow so that all of it is in
+  view, and a long circuit name wraps to a second line rather than being cut
+  short. Mouse-wheel zoom works on DeX, Chromebooks and tablets with a
   trackpad.
 
 ## Install

@@ -69,7 +69,10 @@ fun Schematic.bounds(): FloatArray? {
     return floatArrayOf(left, top, right, bottom)
 }
 
-/** Draws one part symbol. [dx]/[dy] shift it in grid units (used while dragging). */
+/**
+ * Draws one part symbol. [dx]/[dy] shift it in grid units (used while dragging); [energized]
+ * draws a relay pulled in.
+ */
 fun DrawScope.drawPart(
     part: Part,
     transform: GridTransform,
@@ -78,6 +81,7 @@ fun DrawScope.drawPart(
     textMeasurer: TextMeasurer?,
     dx: Float = 0f,
     dy: Float = 0f,
+    energized: Boolean = false,
 ) {
     val def = part.def
     fun point(x: Float, y: Float): Offset {
@@ -85,7 +89,8 @@ fun DrawScope.drawPart(
         return transform.toScreen(part.x + dx + tx, part.y + dy + ty)
     }
     val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
-    for (shape in def.shapesFor(part.value)) {
+    val shapes = (if (energized) def.energizedShapes else null) ?: def.shapesFor(part.value)
+    for (shape in shapes) {
         when (shape) {
             is Shape.Line -> drawLine(color, point(shape.x1, shape.y1), point(shape.x2, shape.y2), strokeWidth, StrokeCap.Round)
             is Shape.Poly -> {

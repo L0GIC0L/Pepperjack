@@ -105,6 +105,116 @@ class EngineInstrumentedTest {
         Log.i(TAG, "Simulated ${ModelZoo.benches().size} model benches, plain and live")
     }
 
+    /**
+     * The E92-331 supply reads the manual's test-point table, at no load and with one 6 A load
+     * switched in: the last two mains cycles' average, within 0.1 V of the manual's range.
+     */
+    @Test
+    fun systemPowerSupplyMatchesTheManual(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        val circuit = Examples.all.first { it.title == "System power supply (E92-331)" }.build()
+        val noLoad = mapOf(
+            "a" to 32.0..33.0, "b" to 28.0..30.0, "c" to 16.3..16.7, "d" to 15.7..16.0, "e" to 15.4..15.5,
+            "f" to 15.0..15.0, "i" to 15.0..15.0, "j" to 15.0..15.0, "out" to 15.0..15.0,
+        )
+        val sixAmps = mapOf(
+            "a" to 29.0..30.0, "b" to 25.0..27.0, "c" to 17.7..18.2, "d" to 17.1..17.5, "e" to 16.6..16.9,
+            "f" to 16.0..16.2, "i" to 16.0..16.2, "j" to 15.3..15.4, "out" to 15.0..15.0,
+        )
+        for ((load, table) in listOf("open" to noLoad, "closed" to sixAmps)) {
+            val parts = circuit.schematic.parts.map { if (it.ref == "LOAD1") it.copy(value = load) else it }
+            val netlist = Netlister.netlist(circuit.copy(schematic = circuit.schematic.copy(parts = parts)))
+            val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            assertTrue(result.error, result.succeeded)
+            val plot = result.plots.first { it.scale?.name.equals("time", true) }
+            val time = plot.scale!!.real
+            val from = time.last() - 2 / 60.0
+            for ((node, range) in table) {
+                val v = plot.vectors.first { it.name.equals(node, true) || it.name.equals("v($node)", true) }.real
+                // Time-weighted, since the steps aren't even.
+                var area = 0.0
+                for (k in 1 until time.size) if (time[k] > from) area += (v[k] + v[k - 1]) / 2 * (time[k] - time[k - 1])
+                val average = area / (time.last() - from)
+                Log.i(TAG, "E92-331 LOAD1 $load: $node = $average V")
+                assertTrue("LOAD1 $load: $node = $average V, manual $range", average in range.start - 0.1..range.endInclusive + 0.1)
+            }
+        }
+    }
+
+    /**
+     * The E92-331 supply against its electronic load, swept 0–16 A–0 in constant current: it holds
+     * 15 V to the knee, collapses past it to near 0 V, stays there while the load asks for more
+     * than the 3 A foldback floor, and recovers once it asks for less. In the same live run with
+     * R15 turned down and both resistive loads on, K1 is in before the loads and out after.
+     */
+    @Test
+    fun systemPowerSupplyLocksUpUnderAConstantCurrentLoad(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        val circuit = Examples.all.first { it.title == "System power supply (E92-331)" }.build()
+        fun with(vararg values: Pair<String, String>) = circuit.copy(
+            schematic = circuit.schematic.copy(parts = circuit.schematic.parts.map { p -> values.toMap()[p.ref]?.let { p.copy(value = it) } ?: p }),
+        )
+        val swept = with("EL1" to "CC 16 on=30m sweep")
+        val netlist = Netlister.netlist(swept)
+        val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+        assertTrue(result.error, result.succeeded)
+        val plot = result.plots.first { it.scale?.name.equals("time", true) }
+        val time = plot.scale!!.real
+        val out = plot.vectors.first { it.name.equals("out", true) || it.name.equals("v(out)", true) }.real
+        fun at(ms: Double) = out[time.indexOfFirst { it >= ms / 1000 }.coerceAtLeast(0)]
+        Log.i(TAG, "E92-331 under EL1: ${listOf(55.0, 70.0, 85.0, 99.5).map { "$it ms ${at(it)} V" }}")
+        assertTrue("regulating at 11 A: ${at(55.0)}", at(55.0) > 14.9)
+        assertTrue("collapsed past the knee: ${at(70.0)}", at(70.0) < 1.0)
+        assertTrue("still locked at 5 A: ${at(85.0)}", at(85.0) < 1.0)
+        assertTrue("recovered below 3 A: ${at(99.5)}", at(99.5) > 14.5)
+
+        val overloaded = with("LOAD1" to "closed", "LOAD2" to "closed", "R15" to "100 18%", "R36" to "200 11%")
+        val live = Netlister.netlist(overloaded, live = true)
+        val liveResult = container.engine.run(live.text, SpiceDialect.Default, live.probeVectors, live.warnings)
+        assertTrue(liveResult.error, liveResult.succeeded)
+        val view = LiveView.build(overloaded.schematic, live, liveResult)!!
+        val k1 = overloaded.schematic.parts.first { it.ref == "K1" }.id
+        val before = view.position(0.025)
+        val after = view.position(0.099)
+        assertTrue("K1 in at 25 ms", k1 in view.energizedAt(before))
+        assertTrue("K1 out at the end", k1 !in view.energizedAt(after))
+    }
+
+    /**
+     * The latching examples hold and let go: the SCR's lamp is out before the gate pulse, held on
+     * after it, out after RESET, and the relay is in between START and STOP and out after.
+     */
+    @Test
+    fun latchingExamplesHoldAndRelease(): Unit = runBlocking {
+        assertTrue(container.engine.status() is EngineStatus.Ready)
+        suspend fun run(title: String): Pair<DoubleArray, (String) -> DoubleArray> {
+            val circuit = Examples.all.first { it.title == title }.build()
+            val netlist = Netlister.netlist(circuit)
+            val result = container.engine.run(netlist.text, SpiceDialect.Default, netlist.probeVectors, netlist.warnings)
+            assertTrue("$title: ${result.error}", result.succeeded)
+            val plot = result.plots.first { it.scale?.name.equals("time", true) }
+            return plot.scale!!.real to { name -> plot.vectors.first { it.name.equals(name, true) }.real }
+        }
+        fun DoubleArray.at(time: DoubleArray, ms: Double) = this[time.indexOfFirst { it >= ms / 1000 }]
+
+        val scr = Examples.all.first { it.title == "SCR latch with reset" }.build()
+        val lampVector = Netlister.netlist(scr).probeVectors.first { it.label == "I(D1)" }.vector
+        val (t1, scrVectors) = run("SCR latch with reset")
+        val lamp = scrVectors(lampVector)
+        Log.i(TAG, "SCR lamp: ${listOf(5.0, 20.0, 30.0, 50.0).map { "$it ms ${lamp.at(t1, it)} A" }}")
+        assertTrue("out before the pulse", lamp.at(t1, 5.0) < 1e-3)
+        assertTrue("held on after it", lamp.at(t1, 20.0) > 10e-3)
+        assertTrue("out after RESET", lamp.at(t1, 30.0) < 1e-3)
+        assertTrue("on again after the next pulse", lamp.at(t1, 50.0) > 10e-3)
+
+        val (t2, relayVectors) = run("Relay start/stop (seal-in)")
+        val coil = relayVectors("coil")
+        Log.i(TAG, "Relay coil: ${listOf(10.0, 45.0, 90.0).map { "$it ms ${coil.at(t2, it)} V" }}")
+        assertTrue("out before START", coil.at(t2, 10.0) < 1.0)
+        assertTrue("sealed in after START", coil.at(t2, 45.0) > 11.0)
+        assertTrue("out after STOP", coil.at(t2, 90.0) < 1.0)
+    }
+
     /** The online library end to end: download TI's LM358 model from GitHub, then simulate it in a schematic. */
     @Test
     fun anOnlineModelDownloadsAndSimulates(): Unit = runBlocking {
@@ -144,7 +254,8 @@ class EngineInstrumentedTest {
             "Light switch (try live mode)", "Potentiometer dimmer (live)", "555 LED blinker", "7805 regulator",
             "Half adder (logic gates)", "Voltage divider", "Kirchhoff's current law", "Wheatstone bridge",
             "Zener regulator", "Current mirror", "LM317 adjustable supply", "4–20 mA current loop",
-            "Triple bench power supply",
+            "Triple bench power supply", "System power supply (E92-331)", "SCR latch with reset", "UJT relaxation oscillator",
+            "LM317 on an electronic load", "Relay start/stop (seal-in)",
         )
     }
 }

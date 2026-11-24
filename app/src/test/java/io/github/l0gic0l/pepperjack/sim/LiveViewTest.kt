@@ -16,6 +16,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LiveViewTest {
+    @Test
+    fun relaysPullInAtTheOperateCurrentAndDropOutAtTheRelease() {
+        // Operate at 30 mA, release at 5 mA; between the two the relay holds its state.
+        val coil = doubleArrayOf(0.0, 0.02, 0.031, 0.02, 0.006, 0.004, 0.02, -0.035)
+        val states = LiveView.relayStates(coil, 0.030 to 0.005)
+        assertEquals(listOf(false, false, true, true, true, false, false, true), states.toList())
+        // Unknown thresholds: pulled in above half the largest coil current.
+        assertEquals(listOf(false, true, false), LiveView.relayStates(doubleArrayOf(0.0, 0.04, 0.01), null).toList())
+    }
+
     // V1 (+ at 0,0) -> R1 (0,-2 to 4,-2) -> R2 (8,-2 to 8,2) -> back along the bottom to ground at (0,4).
     private val schematic = Schematic(
         parts = listOf(

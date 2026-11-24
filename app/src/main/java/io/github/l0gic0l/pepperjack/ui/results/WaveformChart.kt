@@ -85,6 +85,11 @@ fun WaveformChart(
     modifier: Modifier = Modifier,
     /** Shares x-axis zoom with a sibling chart (Bode magnitude and phase). */
     sharedX: ChartWindow? = null,
+    /**
+     * An XY plot: x is another trace, not time, so the points are joined in the order they were
+     * simulated and taps don't place time cursors.
+     */
+    xy: Boolean = false,
 ) {
     val textMeasurer = rememberTextMeasurer()
     val currentTraces by rememberUpdatedState(traces)
@@ -104,7 +109,7 @@ fun WaveformChart(
                         val event = awaitPointerEvent()
                         val pressed = event.changes.filter { it.pressed }
                         if (pressed.isEmpty()) break
-                        val bounds = Bounds.of(currentTraces, xWindow.x, window.y, logX)
+                        val bounds = Bounds.of(currentTraces, xWindow.x, window.y, logX, xy)
                         if (pressed.size >= 2) {
                             multi = true
                             moved = true
@@ -140,7 +145,7 @@ fun WaveformChart(
                             window.reset()
                             sharedX?.reset()
                             cursors.clear()
-                        } else {
+                        } else if (!xy) {
                             val bounds = Bounds.of(currentTraces, xWindow.x, window.y, logX)
                             val fraction = layout.fractionX(down.position.x).coerceIn(0f, 1f)
                             cursors.place(bounds.xAt(fraction, logX))
@@ -151,7 +156,7 @@ fun WaveformChart(
             },
     ) {
         val layout = ChartLayout.of(size.width, size.height, density)
-        val bounds = Bounds.of(traces, xWindow.x, window.y, logX)
+        val bounds = Bounds.of(traces, xWindow.x, window.y, logX, xy)
         val labelStyle = TextStyle(color = colors.label, fontSize = 11.sp)
 
         // Grid and tick labels
@@ -175,7 +180,7 @@ fun WaveformChart(
         clipRect(layout.left, layout.top, layout.right, layout.bottom) {
             val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
             traces.forEach { trace ->
-                val path = decimatedPath(trace, bounds, layout, logX)
+                val path = if (xy) sequentialPath(trace, bounds, layout) else decimatedPath(trace, bounds, layout, logX)
                 drawPath(path, trace.color, style = stroke)
             }
             listOfNotNull(cursors.a?.let { "A" to it }, cursors.b?.let { "B" to it }).forEach { (name, x) ->
@@ -226,7 +231,14 @@ internal class Bounds(val xMin: Double, val xMax: Double, val yMin: Double, val 
     }
 
     companion object {
-        fun of(traces: List<Trace>, x: ClosedFloatingPointRange<Double>?, y: ClosedFloatingPointRange<Double>?, logX: Boolean): Bounds {
+        fun of(
+            traces: List<Trace>,
+            x: ClosedFloatingPointRange<Double>?,
+            y: ClosedFloatingPointRange<Double>?,
+            logX: Boolean,
+            /** Leave a margin either side of the x data too, as an XY plot's curve can end at either edge. */
+            padX: Boolean = false,
+        ): Bounds {
             var xMin = Double.POSITIVE_INFINITY
             var xMax = Double.NEGATIVE_INFINITY
             traces.forEach { t ->
@@ -234,6 +246,11 @@ internal class Bounds(val xMin: Double, val xMax: Double, val yMin: Double, val 
             }
             if (!xMin.isFinite()) { xMin = if (logX) 1.0 else 0.0; xMax = if (logX) 10.0 else 1.0 }
             if (xMax <= xMin) xMax = if (logX) xMin * 10 else xMin + 1
+            if (padX && !logX) {
+                val pad = (xMax - xMin) * 0.06
+                xMin -= pad
+                xMax += pad
+            }
             val xr = x ?: (xMin..xMax)
 
             val yr = y ?: run {
@@ -282,6 +299,33 @@ private fun panRange(range: ClosedFloatingPointRange<Double>, fraction: Float, l
         val shift = (range.endInclusive - range.start) * fraction
         (range.start + shift)..(range.endInclusive + shift)
     }
+
+/** An XY trace joined in sample order, skipping points less than a pixel from the last one drawn. */
+private fun sequentialPath(trace: Trace, bounds: Bounds, layout: ChartLayout): Path {
+    val path = Path()
+    val n = minOf(trace.x.size, trace.y.size)
+    var lastX = Float.NaN
+    var lastY = Float.NaN
+    var pendingX = Float.NaN
+    var pendingY = Float.NaN
+    for (i in 0 until n) {
+        val px = layout.left + bounds.fractionX(trace.x[i], false) * layout.width
+        val py = layout.bottom - bounds.fractionY(trace.y[i]) * layout.height
+        if (!px.isFinite() || !py.isFinite()) continue
+        if (lastX.isNaN()) {
+            path.moveTo(px, py)
+            lastX = px; lastY = py
+        } else if (abs(px - lastX) + abs(py - lastY) >= 0.75f) {
+            path.lineTo(px, py)
+            lastX = px; lastY = py
+            pendingX = Float.NaN
+        } else {
+            pendingX = px; pendingY = py
+        }
+    }
+    if (!pendingX.isNaN()) path.lineTo(pendingX, pendingY)
+    return path
+}
 
 /** Min/max decimation per pixel column so 10⁵-point transients stay smooth. */
 private fun decimatedPath(trace: Trace, bounds: Bounds, layout: ChartLayout, logX: Boolean): Path {
